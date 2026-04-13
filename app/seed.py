@@ -146,6 +146,7 @@ def run_seed():
                 email=ADMIN_USER["email"],
                 password=_hash(ADMIN_USER["password"]),
                 phone=ADMIN_USER["phone"],
+                type="user",
             )
             admin.roles = [role_map["admin"]]
             db.add(admin)

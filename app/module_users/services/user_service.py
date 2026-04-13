@@ -49,11 +49,6 @@ def _resolve_roles(db: Session, role_ids: list[int]):
 # ── CRUD ─────────────────────────────────────────────────────────────────────
 
 def create_user(db: Session, data: UserCreateDto) -> User:
-    if user_repository.exists_user_by_username(db, data.username):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"El username '{data.username}' ya está en uso",
-        )
     if user_repository.get_user_by_email(db, data.email):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

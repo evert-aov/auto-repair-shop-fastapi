@@ -15,7 +15,6 @@ class UserBase(BaseModel):
 
 class UserCreateDto(UserBase):
     password: str
-    username: str
     role_ids: list[int] = []
 
 

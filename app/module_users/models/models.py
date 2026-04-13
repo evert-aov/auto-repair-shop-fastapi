@@ -46,6 +46,14 @@ class User(Base):
         onupdate=func.now(),
     )
 
+    # Campo discriminador para la herencia
+    type: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    __mapper_args__ = {
+        "polymorphic_on": type,
+        "polymorphic_identity": "user",
+    }
+
     roles: Mapped[list["Role"]] = relationship(
         'Role', secondary=role_user, back_populates='users'
     )
