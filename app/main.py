@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.module_users.controller.user_controller import router as users_router
 from app.security.controller.auth_controller import router as auth_router
@@ -10,6 +11,15 @@ from app.module_clients.controller.vehicle_controller import router as vehicle_r
 app = FastAPI(
     title="Plataforma de Auxilio Mecánico",
     version="1.0.0",
+)
+
+# Configurar CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En producción, usa una lista de dominios específicos
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(auth_router)
