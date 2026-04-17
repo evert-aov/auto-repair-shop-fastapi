@@ -2,7 +2,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.module_clients.models.models import Vehicle
+from app.security.models import Vehicle
 
 
 def get_all_vehicles(db: Session) -> list[Vehicle]:

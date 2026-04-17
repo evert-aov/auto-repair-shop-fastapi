@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.module_clients.models.models import TransmissionType, FuelType
+from app.security.models import TransmissionType, FuelType
 
 
 # ── Create / Update ──────────────────────────────────────────────────────────
