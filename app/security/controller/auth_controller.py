@@ -3,15 +3,13 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.module_clients.dtos.client_dtos import ClientCreateDTO, ClientResponseDTO
-from app.module_clients.services import client_service
-from app.module_clients.services.client_service import create_client
+from app.security.dto.client_dtos import ClientCreateDTO, ClientResponseDTO
 from app.module_users.dtos.user_dtos import UserResponseDto
 from app.security.config.security import get_current_user, require_role
 from app.security.dto.auth_dtos import LoginRequestDto, LoginResponseDto
-from app.security.service import auth_service
+from app.security.service import auth_service, client_service
 
-router = APIRouter(prefix="/auth", tags=["Auth"])
+router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 
 @router.post("/login", response_model=LoginResponseDto)

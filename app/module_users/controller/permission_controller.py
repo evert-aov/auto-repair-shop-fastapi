@@ -10,7 +10,7 @@ from app.module_users.dtos.permission_dtos import (
 from app.module_users.services import permission_service
 from app.security.config.security import require_role
 
-router = APIRouter(prefix="/permissions", tags=["Permissions"])
+router = APIRouter(prefix="/api/permissions", tags=["Permissions"])
 
 # Solo admin puede gestionar permisos
 _admin_only = Depends(require_role("admin"))

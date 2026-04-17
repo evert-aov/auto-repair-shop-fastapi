@@ -7,8 +7,7 @@ from app.database import get_db
 from app.module_users.dtos.user_dtos import UserResponseDto, UserCreateDto, UserUpdateDto
 from app.module_users.services import user_service
 from app.security.config.security import require_role
-
-router = APIRouter(prefix="/users", tags=["Users"])
+router = APIRouter(prefix="/api/users", tags=["Users"])
 
 # Solo admin y workshop_owner pueden acceder al CRUD de usuarios
 _allowed = Depends(require_role("admin", "workshop_owner"))
