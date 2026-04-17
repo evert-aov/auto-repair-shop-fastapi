@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.module_clients.dtos.client_dtos import ClientCreateDTO, ClientResponseDTO, ClientUpdateDTO
-from app.module_clients.services import client_service
+from app.security.dto.client_dtos import ClientCreateDTO, ClientResponseDTO, ClientUpdateDTO
+from app.security.service import client_service
 from app.security.config.security import require_role
 
 router = APIRouter(prefix="/api/clients", tags=["Clients"])

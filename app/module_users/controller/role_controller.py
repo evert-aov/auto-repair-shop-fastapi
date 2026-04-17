@@ -12,7 +12,7 @@ from app.module_users.dtos.role_dtos import (
 from app.module_users.services import role_service
 from app.security.config.security import require_role
 
-router = APIRouter(prefix="/roles", tags=["Roles"])
+router = APIRouter(prefix="/api/roles", tags=["Roles"])
 
 # Solo admin puede gestionar roles
 _admin_only = Depends(require_role("admin"))

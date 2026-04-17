@@ -2,7 +2,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.module_clients.models.models import Client
+from app.security.models import Client
 
 
 def get_all_clients(db: Session) -> list[Client]:
