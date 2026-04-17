@@ -8,7 +8,7 @@ from app.module_clients.dtos.client_dtos import ClientCreateDTO, ClientResponseD
 from app.module_clients.services import client_service
 from app.security.config.security import require_role
 
-router = APIRouter(prefix="/clients", tags=["Clients"])
+router = APIRouter(prefix="/api/clients", tags=["Clients"])
 
 _allowed = Depends(require_role("admin"))
 

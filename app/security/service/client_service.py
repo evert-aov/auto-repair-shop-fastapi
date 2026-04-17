@@ -4,9 +4,9 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.module_clients.dtos.client_dtos import ClientCreateDTO, ClientUpdateDTO
-from app.module_clients.models.models import Client
-from app.module_clients.repositories import client_repository
+from app.security.dto.client_dtos import ClientCreateDTO, ClientUpdateDTO
+from app.security.models import Client
+from app.security.repository import client_repository
 from app.module_users.repositories import user_repository, role_repository
 from app.module_users.services.user_service import get_password_hash, _generate_username
 
@@ -29,7 +29,7 @@ def create_client(db: Session, data: ClientCreateDTO) -> Client:
             detail="Rol 'client' no encontrado. Ejecuta el seed primero.",
         )
 
-    # 3. Crear el Client directamente (hereda de User via joined-table inheritance)
+    # 3. Crear el Client directamente (hereda dye User via joined-table inheritance)
     #    SQLAlchemy inserta automáticamente en 'users' y 'clients'.
     client = Client(
         username=_generate_username(db),

@@ -4,9 +4,10 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.module_clients.dtos.vehicle_dtos import VehicleCreateDTO, VehicleUpdateDTO
-from app.module_clients.models.models import Vehicle
-from app.module_clients.repositories import vehicle_repository, client_repository
+from app.module_users.dtos.vehicle_dtos import VehicleCreateDTO, VehicleUpdateDTO
+from app.security.models import Vehicle
+from app.module_users.repositories import vehicle_repository
+from app.security.repository import client_repository
 from app.module_users.models.models import User
 
 

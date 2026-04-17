@@ -8,7 +8,7 @@ from app.module_clients.dtos.vehicle_dtos import VehicleCreateDTO, VehicleRespon
 from app.module_clients.services import vehicle_service
 from app.security.config.security import require_role, get_current_user
 
-router = APIRouter(prefix="/vehicles", tags=["Vehicles"])
+router = APIRouter(prefix="/api/vehicles", tags=["Vehicles"])
 
 _allowed = Depends(require_role("admin", "client"))
 
