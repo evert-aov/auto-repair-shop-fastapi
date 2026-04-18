@@ -1,9 +1,13 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import UUID, Boolean, Column, DateTime, ForeignKey, BigInteger, Identity, String, Table, func, text
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.module_incidents.models import Notification
 
 role_user = Table(
     'role_user', Base.metadata,
@@ -56,6 +60,9 @@ class User(Base):
     
     roles: Mapped[list["Role"]] = relationship(
         'Role', secondary=role_user, back_populates='users'
+    )
+    notifications: Mapped[list["Notification"]] = relationship(
+        "Notification", back_populates="user", cascade="all, delete-orphan"
     )
 
 

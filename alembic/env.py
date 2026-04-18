@@ -23,6 +23,12 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 from app.database import Base
 
+# Import all models so Alembic autogenerate can detect them
+import app.module_users.models  # noqa: F401
+import app.security.models  # noqa: F401
+import app.module_workshops.models  # noqa: F401
+import app.module_incidents.models  # noqa: F401
+
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,

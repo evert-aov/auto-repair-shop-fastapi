@@ -1,12 +1,16 @@
 import enum
 from datetime import datetime
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import UUID, Boolean, DateTime, Enum, ForeignKey, SmallInteger, String, func, text, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.module_users.models import User
+
+if TYPE_CHECKING:
+    from app.module_incidents.models import Rating, Payment
 
 
 class Client(User):
@@ -27,6 +31,8 @@ class Client(User):
     }
 
     vehicles: Mapped[list["Vehicle"]] = relationship("Vehicle", back_populates="client", lazy="selectin")
+    ratings: Mapped[list["Rating"]] = relationship("Rating", back_populates="client")
+    payments: Mapped[list["Payment"]] = relationship("Payment", back_populates="client")
 
 
 class TransmissionType(enum.Enum):

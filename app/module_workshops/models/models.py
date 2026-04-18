@@ -11,7 +11,8 @@ from app.database import Base
 from app.module_users.models.models import User
 
 if TYPE_CHECKING:
-    from app.module_incidents.models import Payment, Rating
+    pass
+    # from app.module_incidents.models import Payment, Rating
 
 
 class Specialty(Base):
@@ -85,10 +86,10 @@ class Workshop(Base):
         creator=lambda specialty: WorkshopSpecialty(specialty=specialty),
     )
     technicians: Mapped[list["Technician"]] = relationship(
-        "Technician", back_populates="workshop"
+        "Technician", back_populates="workshop", foreign_keys="[Technician.workshop_id]"
     )
-    ratings: Mapped[list["Rating"]] = relationship("Rating", back_populates="workshop")
-    payments: Mapped[list["Payment"]] = relationship("Payment", back_populates="workshop")
+    # ratings: Mapped[list["Rating"]] = relationship("Rating", back_populates="workshop")
+    # payments: Mapped[list["Payment"]] = relationship("Payment", back_populates="workshop")
 
 
 class Technician(User):
@@ -107,7 +108,9 @@ class Technician(User):
     current_longitude: Mapped[Decimal | None] = mapped_column(Numeric(11, 8), nullable=True)
     is_available: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("TRUE"))
 
-    workshop: Mapped["Workshop"] = relationship("Workshop", back_populates="technicians")
+    workshop: Mapped["Workshop"] = relationship(
+        "Workshop", back_populates="technicians", foreign_keys="[Technician.workshop_id]"
+    )
 
     __mapper_args__ = {
         "polymorphic_identity": "technician",

@@ -1,0 +1,16 @@
+from app.module_incidents.models.models import (
+    Incident,
+    IncidentEvidence,
+    IncidentStatusHistory,
+    WorkshopOffer,
+    Rating,
+    Notification,
+    Payment,
+    IncidentStatus,
+    IncidentPriority,
+    EvidenceType,
+    OfferStatus,
+    NotificationType,
+    PaymentMethod,
+    PaymentStatus,
+)

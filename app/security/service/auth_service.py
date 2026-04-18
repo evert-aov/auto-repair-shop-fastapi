@@ -5,7 +5,7 @@ from starlette import status
 from app.module_users.repositories.user_repository import get_user_by_username
 from app.module_users.services.user_service import verify_password
 from app.security.config.security import create_access_token
-from app.security.dto.auth_dtos import LoginRequestDto, LoginResponseDto, RoleDto
+from app.security.dto.auth_dtos import LoginRequestDto, LoginResponseDto, ProfileUpdateDto, RoleDto
 
 ROLE_CLIENT = "client"
 ROLE_WORKSHOP_OWNER = "workshop_owner"
@@ -72,3 +72,29 @@ def login(db: Session, data: LoginRequestDto) -> LoginResponseDto:
         user_name=user.username,
         roles=[RoleDto.model_validate(r) for r in user.roles],
     )
+
+
+def update_profile(db: Session, current_user, data: ProfileUpdateDto):
+    from app.module_users.services.user_service import get_password_hash
+    from app.security.repository import client_repository
+    from app.module_users.repositories import user_repository
+
+    if data.name is not None:
+        current_user.name = data.name
+    if data.last_name is not None:
+        current_user.last_name = data.last_name
+    if data.phone is not None:
+        current_user.phone = data.phone
+    if data.password is not None:
+        current_user.password = get_password_hash(data.password)
+
+    if current_user.type == "client":
+        if data.address is not None:
+            current_user.address = data.address
+        if data.insurance_provider is not None:
+            current_user.insurance_provider = data.insurance_provider
+        if data.insurance_policy_number is not None:
+            current_user.insurance_policy_number = data.insurance_policy_number
+        return client_repository.save_client(db, current_user)
+
+    return user_repository.save_user(db, current_user)
