@@ -34,7 +34,6 @@ class UserResponseDto(UserBase):
     created_at: datetime
     updated_at: datetime
     roles: list[RoleResponseDto] = []
-    created_by_id: UUID | None = None
 
     class Config:
         from_attributes = True

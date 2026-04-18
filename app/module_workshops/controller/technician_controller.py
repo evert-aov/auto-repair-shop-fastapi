@@ -21,7 +21,7 @@ def create_technician(
     """Owner only: Create a technician for their workshop."""
     service = TechnicianService(db)
     workshop_id = service.get_owner_workshop_id(current_user.id)
-    return service.create(workshop_id, dto, created_by_id=current_user.id)
+    return service.create(workshop_id, dto)
 
 @router.get("/", response_model=List[TechnicianResponse], status_code=status.HTTP_200_OK)
 def list_technicians(
@@ -31,7 +31,7 @@ def list_technicians(
     """Owner only: List all technicians from their workshop."""
     service = TechnicianService(db)
     workshop_id = service.get_owner_workshop_id(current_user.id)
-    return service.get_all_by_workshop(workshop_id, created_by_id=current_user.id)
+    return service.get_all_by_workshop(workshop_id)
 
 @router.get("/{technician_id}", response_model=TechnicianResponse, status_code=status.HTTP_200_OK)
 def get_technician(
@@ -42,7 +42,7 @@ def get_technician(
     """Owner only: Get technician details."""
     service = TechnicianService(db)
     workshop_id = service.get_owner_workshop_id(current_user.id)
-    return service.get_by_id_and_workshop(technician_id, workshop_id, created_by_id=current_user.id)
+    return service.get_by_id_and_workshop(technician_id, workshop_id)
 
 @router.put("/{technician_id}", response_model=TechnicianResponse, status_code=status.HTTP_200_OK)
 def update_technician(
@@ -54,7 +54,7 @@ def update_technician(
     """Owner only: Update technician details."""
     service = TechnicianService(db)
     workshop_id = service.get_owner_workshop_id(current_user.id)
-    return service.update(workshop_id, technician_id, dto, created_by_id=current_user.id)
+    return service.update(workshop_id, technician_id, dto)
 
 @router.delete("/{technician_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_technician(
@@ -65,4 +65,4 @@ def delete_technician(
     """Owner only: Soft delete technician."""
     service = TechnicianService(db)
     workshop_id = service.get_owner_workshop_id(current_user.id)
-    service.delete(workshop_id, technician_id, created_by_id=current_user.id)
+    service.delete(workshop_id, technician_id)

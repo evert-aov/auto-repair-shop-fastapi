@@ -53,17 +53,9 @@ class User(Base):
         "polymorphic_on": type,
         "polymorphic_identity": "user",
     }
-
-    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
     
     roles: Mapped[list["Role"]] = relationship(
         'Role', secondary=role_user, back_populates='users'
-    )
-    
-    creator: Mapped["User | None"] = relationship(
-        "User", remote_side=[id], backref="created_users"
     )
 
 

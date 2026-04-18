@@ -1,4 +1,3 @@
-import uuid
 from typing import List
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
@@ -28,14 +27,14 @@ def list_specialties(db: Session = Depends(get_db)):
     return service.get_all()
 
 @router.get("/{specialty_id}", response_model=SpecialtyResponse, status_code=status.HTTP_200_OK)
-def get_specialty(specialty_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_specialty(specialty_id: int, db: Session = Depends(get_db)):
     """Public/Authenticated: Get specialty details."""
     service = SpecialtyService(db)
     return service.get_by_id(specialty_id)
 
 @router.put("/{specialty_id}", response_model=SpecialtyResponse, status_code=status.HTTP_200_OK)
 def update_specialty(
-    specialty_id: uuid.UUID,
+    specialty_id: int,
     dto: SpecialtyUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(require_role("admin"))
@@ -46,7 +45,7 @@ def update_specialty(
 
 @router.delete("/{specialty_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_specialty(
-    specialty_id: uuid.UUID,
+    specialty_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(require_role("admin"))
 ):

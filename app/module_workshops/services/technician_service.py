@@ -19,9 +19,11 @@ class TechnicianService:
         owner_profile = self.repository.get_by_id(owner_user_id)
         if not owner_profile:
             raise HTTPException(status_code=404, detail="Perfil de dueño de taller no encontrado")
+        if not any(role.name == "workshop_owner" for role in owner_profile.roles):
+            raise HTTPException(status_code=403, detail="El usuario no es dueño de taller")
         return owner_profile.workshop_id
 
-    def create(self, workshop_id: uuid.UUID, dto: TechnicianCreate, created_by_id: uuid.UUID = None) -> Technician:
+    def create(self, workshop_id: uuid.UUID, dto: TechnicianCreate) -> Technician:
         if user_repository.get_user_by_email(self.db, dto.email):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -42,29 +44,22 @@ class TechnicianService:
             is_active=True,
             is_available=dto.is_available,
             workshop_id=workshop_id,
-            created_by_id=created_by_id
         )
         technician.roles = [role]
         return self.repository.create(technician)
 
-    def get_by_id_and_workshop(self, technician_id: uuid.UUID, workshop_id: uuid.UUID, created_by_id: uuid.UUID = None) -> Technician:
+    def get_by_id_and_workshop(self, technician_id: uuid.UUID, workshop_id: uuid.UUID) -> Technician:
         technician = self.repository.get_by_id(technician_id)
         if not technician or technician.workshop_id != workshop_id:
             raise HTTPException(status_code=404, detail="Technician not found for this workshop")
-        
-        if created_by_id and technician.created_by_id != created_by_id:
-            raise HTTPException(status_code=403, detail="Not authorized to access this technician")
             
         return technician
 
-    def get_all_by_workshop(self, workshop_id: uuid.UUID, created_by_id: uuid.UUID = None) -> List[Technician]:
-        technicians = self.repository.get_by_workshop(workshop_id)
-        if created_by_id:
-            return [t for t in technicians if t.created_by_id == created_by_id]
-        return technicians
+    def get_all_by_workshop(self, workshop_id: uuid.UUID) -> List[Technician]:
+        return self.repository.get_by_workshop(workshop_id)
 
-    def update(self, workshop_id: uuid.UUID, technician_id: uuid.UUID, dto: TechnicianUpdate, created_by_id: uuid.UUID = None) -> Technician:
-        technician = self.get_by_id_and_workshop(technician_id, workshop_id, created_by_id)
+    def update(self, workshop_id: uuid.UUID, technician_id: uuid.UUID, dto: TechnicianUpdate) -> Technician:
+        technician = self.get_by_id_and_workshop(technician_id, workshop_id)
         if dto.name is not None:
             technician.name = dto.name
         if dto.last_name is not None:
@@ -76,6 +71,6 @@ class TechnicianService:
             
         return self.repository.update(technician)
 
-    def delete(self, workshop_id: uuid.UUID, technician_id: uuid.UUID, created_by_id: uuid.UUID = None):
-        technician = self.get_by_id_and_workshop(technician_id, workshop_id, created_by_id)
+    def delete(self, workshop_id: uuid.UUID, technician_id: uuid.UUID):
+        technician = self.get_by_id_and_workshop(technician_id, workshop_id)
         self.repository.delete(technician)

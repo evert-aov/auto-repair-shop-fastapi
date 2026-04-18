@@ -22,6 +22,8 @@ class WorkshopService:
         owner_profile = self.technician_repo.get_by_id(owner_user_id)
         if not owner_profile:
             raise HTTPException(status_code=404, detail="Perfil de taller no encontrado")
+        if not any(role.name == "workshop_owner" for role in owner_profile.roles):
+            raise HTTPException(status_code=403, detail="El usuario no es dueño de taller")
         return owner_profile
 
     def register_public(self, dto: WorkshopRegisterPublic) -> Workshop:
@@ -32,15 +34,21 @@ class WorkshopService:
                 detail=f"El email '{dto.email}' ya está registrado"
             )
 
-        role = role_repository.get_role_by_name(self.db, "workshop_owner")
-        if not role:
+        owner_role = role_repository.get_role_by_name(self.db, "workshop_owner")
+        technician_role = role_repository.get_role_by_name(self.db, "technician")
+        if not owner_role or not technician_role:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Rol 'workshop_owner' no existe en el sistema.",
+                detail="Roles requeridos ('workshop_owner' y 'technician') no existen en el sistema.",
             )
 
         try:
+            owner_id = uuid.uuid4()
+            workshop_id = uuid.uuid4()
+
             workshop = Workshop(
+                id=workshop_id,
+                owner_user_id=owner_id,
                 name=dto.name,
                 business_name=dto.business_name,
                 ruc_nit=dto.ruc_nit,
@@ -48,16 +56,16 @@ class WorkshopService:
                 phone=dto.phone,
                 latitude=dto.latitude,
                 longitude=dto.longitude,
+                is_active=True,
                 is_available=True,
                 is_verified=False,
                 commission_rate=10.0,
-                rating_avg=0,
+                rating_avg=0.0,
                 total_services=0,
             )
-            self.db.add(workshop)
-            self.db.flush()
 
             technician = Technician(
+                id=owner_id,
                 username=_generate_username(self.db),
                 name=dto.owner_name,
                 last_name=dto.owner_last_name,
@@ -66,10 +74,10 @@ class WorkshopService:
                 phone=dto.owner_phone,
                 is_active=False,
                 is_available=True,
-                workshop_id=workshop.id,
+                workshop_id=workshop_id,
             )
-            technician.roles = [role]
-            self.db.add(technician)
+            technician.roles = [owner_role, technician_role]
+            self.db.add_all([workshop, technician])
             self.db.commit()
             self.db.refresh(workshop)
         except Exception:
@@ -116,6 +124,8 @@ class WorkshopService:
             workshop.name = dto.name
         if dto.business_name is not None:
             workshop.business_name = dto.business_name
+        if dto.ruc_nit is not None:
+            workshop.ruc_nit = dto.ruc_nit
         if dto.address is not None:
             workshop.address = dto.address
         if dto.phone is not None:
@@ -148,6 +158,8 @@ class WorkshopService:
             workshop.name = dto.name
         if dto.business_name is not None:
             workshop.business_name = dto.business_name
+        if dto.ruc_nit is not None:
+            workshop.ruc_nit = dto.ruc_nit
         if dto.address is not None:
             workshop.address = dto.address
         if dto.phone is not None:

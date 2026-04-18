@@ -14,10 +14,14 @@ class TechnicianRepository:
         return technician
 
     def get_by_id(self, technician_id: uuid.UUID) -> Optional[Technician]:
-        return self.db.query(Technician).filter(Technician.id == technician_id).first()
+        return self.db.query(Technician).options(
+            selectinload(Technician.roles)
+        ).filter(Technician.id == technician_id).first()
 
     def get_by_workshop(self, workshop_id: uuid.UUID) -> List[Technician]:
-        return self.db.query(Technician).filter(
+        return self.db.query(Technician).options(
+            selectinload(Technician.roles)
+        ).filter(
             Technician.workshop_id == workshop_id, 
             Technician.is_active == True
         ).all()

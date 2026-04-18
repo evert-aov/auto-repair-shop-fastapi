@@ -6,7 +6,7 @@ from app.module_workshops.dtos.specialty_dto import SpecialtyResponse
 
 class WorkshopBase(BaseModel):
     name: str = Field(..., max_length=150)
-    business_name: str = Field(..., max_length=200)
+    business_name: str = Field(..., max_length=255)
     ruc_nit: str = Field(..., max_length=50)
     address: str = Field(...) # TEXT
     phone: str = Field(..., max_length=50)
@@ -29,12 +29,13 @@ class WorkshopRegisterPublic(WorkshopBase):
 
 class WorkshopUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=150)
-    business_name: Optional[str] = Field(None, max_length=200)
+    business_name: Optional[str] = Field(None, max_length=255)
+    ruc_nit: Optional[str] = Field(None, max_length=50)
     address: Optional[str] = Field(None)
     phone: Optional[str] = Field(None, max_length=50)
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    specialty_ids: Optional[List[uuid.UUID]] = None
+    specialty_ids: Optional[List[int]] = None
 
 class WorkshopAdminUpdate(WorkshopUpdate):
     is_available: Optional[bool] = None
@@ -44,14 +45,19 @@ class WorkshopAdminUpdate(WorkshopUpdate):
 class WorkshopResponse(WorkshopBase):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
+    owner_user_id: uuid.UUID
     is_available: bool
     is_verified: bool
+    is_active: bool
     commission_rate: float
     rating_avg: Optional[float] = None
     total_services: int
+    rejection_count: int
+    last_rejection_at: Optional[datetime] = None
+    rejection_rate: float
     created_at: datetime
     updated_at: datetime
-    specialties: List[SpecialtyResponse] = []
+    specialties: List[SpecialtyResponse] = Field(default_factory=list)
     
     # New fields for Admin Detail View
     owner_name: Optional[str] = None
