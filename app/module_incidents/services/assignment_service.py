@@ -39,6 +39,7 @@ def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     )
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
+## Calificacion de talleres
 
 def _calculate_ai_score(
     distance_km: float,
