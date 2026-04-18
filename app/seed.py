@@ -5,10 +5,12 @@ Ejecutar:
     python -m app.seed
 """
 import bcrypt
+import uuid
 from sqlalchemy.orm import Session
 
-from app.database import SessionLocal
+from app.database import SessionLocal, Base, engine
 from app.module_users.models.models import Permission, Role, User
+from app.module_workshops.models.models import Workshop, Technician, Specialty
 
 
 def _hash(password: str) -> str:
@@ -94,8 +96,27 @@ ADMIN_USER = {
     "phone": None,
 }
 
+OWNER_USER = {
+    "username": "owner",
+    "name": "Taller",
+    "last_name": "Dueño",
+    "email": "owner@tallercentral.com",
+    "password": "owner123",
+    "phone": "77889900",
+}
+
+DEFAULT_SPECIALTIES = [
+    {"name": "Mecánica General"},
+    {"name": "Electricidad"},
+    {"name": "Chapería y Pintura"},
+    {"name": "Frenos"},
+]
+
 
 def run_seed():
+    # Asegurar que todas las tablas existan (incluyendo las nuevas de workshops)
+    Base.metadata.create_all(bind=engine)
+    
     db: Session = SessionLocal()
 
     try:
@@ -151,6 +172,78 @@ def run_seed():
             admin.roles = [role_map["admin"]]
             db.add(admin)
             print(f"  ✅ Usuario admin creado: {ADMIN_USER['username']} / {ADMIN_USER['password']}")
+
+        # 4. Crear Especialidades por defecto
+        for spec_data in DEFAULT_SPECIALTIES:
+            existing = db.query(Specialty).filter(Specialty.name == spec_data["name"]).first()
+            if not existing:
+                spec = Specialty(**spec_data)
+                db.add(spec)
+                print(f"  ✅ Especialidad creada: {spec_data['name']}")
+
+        # 5. Crear un taller de prueba si no existe
+        existing_workshop = db.query(Workshop).filter(Workshop.ruc_nit == "1234567-0").first()
+        existing_owner = db.query(User).filter(User.username == OWNER_USER["username"]).first()
+
+        if existing_owner:
+            owner = existing_owner
+            owner_id = owner.id
+        elif existing_workshop:
+            owner = None
+            owner_id = existing_workshop.owner_user_id
+        else:
+            owner = None
+            owner_id = uuid.uuid4()
+
+        if not existing_workshop:
+            workshop_id = uuid.uuid4()
+            workshop = Workshop(
+                id=workshop_id,
+                owner_user_id=owner_id,
+                name="Taller Central",
+                business_name="Talleres Automotrices S.A.",
+                ruc_nit="1234567-0",
+                address="Av. Panamericana #123",
+                phone="44556677",
+                latitude=-17.7833,
+                longitude=-63.1821,
+                is_active=True,
+                is_available=True,
+                is_verified=True,
+                commission_rate=10.0,
+                rating_avg=0.0,
+                total_services=0,
+            )
+            db.add(workshop)
+            print(f"  ✅ Taller de prueba creado: {workshop.name}")
+        else:
+            workshop = existing_workshop
+            workshop_id = workshop.id
+            workshop.owner_user_id = owner_id
+
+        # 6. Crear dueño del taller (Technician)
+        if owner:
+            print(f"  ⏭  Usuario dueño ya existe: {OWNER_USER['username']}")
+        else:
+            owner = Technician(
+                id=owner_id,
+                username=OWNER_USER["username"],
+                name=OWNER_USER["name"],
+                last_name=OWNER_USER["last_name"],
+                email=OWNER_USER["email"],
+                password=_hash(OWNER_USER["password"]),
+                phone=OWNER_USER["phone"],
+                type="technician", # Importante: el tipo debe coincidir con el rol/modelo
+                workshop_id=workshop_id,
+                is_active=True,
+                is_available=True,
+            )
+            owner.roles = [role_map["workshop_owner"], role_map["technician"]]
+            db.add(owner)
+            print(f"  ✅ Usuario dueño creado: {OWNER_USER['username']} / {OWNER_USER['password']}")
+
+        if hasattr(owner, "workshop_id"):
+            owner.workshop_id = workshop_id
 
         db.commit()
         print("\n🎉 Seed completado exitosamente!")

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from starlette import status
 
 from app.module_users.repositories.user_repository import get_user_by_username
+from app.module_users.services.user_service import verify_password
 from app.security.config.security import create_access_token
 from app.security.dto.auth_dtos import LoginRequestDto, LoginResponseDto, ProfileUpdateDto, RoleDto
 
@@ -30,8 +31,6 @@ def _resolve_redirect(role_names: set[str]) -> str:
     return "/app/dashboard"
 
 def login(db: Session, data: LoginRequestDto) -> LoginResponseDto:
-    from app.module_users.services.user_service import verify_password
-
     user = get_user_by_username(db, data.username)
 
     if not user:

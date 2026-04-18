@@ -1,1 +1,13 @@
-from app.module_workshops.models.models import Workshop, Specialty, WorkshopSpecialty, Technician
+from app.module_workshops.models.models import (
+    Specialty,
+    Workshop,
+    WorkshopSpecialty,
+    Technician,
+)
+
+__all__ = [
+    "Specialty",
+    "Workshop",
+    "WorkshopSpecialty",
+    "Technician",
+]
