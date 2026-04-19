@@ -1,9 +1,7 @@
 import uuid
 import math
 from typing import List, Optional
-
 from sqlalchemy.orm import Session, selectinload
-
 from app.module_workshops.models.models import Workshop, Technician, WorkshopSpecialty, Specialty
 
 
@@ -48,6 +46,10 @@ def find_nearby_workshops(
         w for w in workshops
         if _haversine(latitude, longitude, float(w.latitude or 0), float(w.longitude or 0)) <= radius_km
     ]
+
+
+def get_workshops_by_owner(db: Session, owner_user_id: uuid.UUID) -> list[Workshop]:
+    return db.query(Workshop).filter(Workshop.owner_user_id == owner_user_id).all()
 
 
 def save_workshop(db: Session, workshop: Workshop) -> Workshop:

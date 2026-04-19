@@ -106,10 +106,14 @@ OWNER_USER = {
 }
 
 DEFAULT_SPECIALTIES = [
-    {"name": "Mecánica General"},
-    {"name": "Electricidad"},
-    {"name": "Chapería y Pintura"},
-    {"name": "Frenos"},
+    {"name": "general"},
+    {"name": "battery"},
+    {"name": "tire"},
+    {"name": "engine"},
+    {"name": "ac"},
+    {"name": "transmission"},
+    {"name": "towing"},
+    {"name": "locksmith"},
 ]
 
 

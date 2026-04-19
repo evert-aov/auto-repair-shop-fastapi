@@ -71,7 +71,17 @@ class OfferStatus(str, enum.Enum):
     NOTIFIED = "notified"
     ACCEPTED = "accepted"
     REJECTED = "rejected"
+    TIMEOUT = "timeout"
     EXPIRED = "expired"
+
+
+class RejectionReason(str, enum.Enum):
+    NO_REASON = "no_reason"
+    BUSY = "busy"
+    FAR_FROM_ZONE = "far_from_zone"
+    NO_PARTS = "no_parts"
+    NO_TECHNICIAN = "no_technician"
+    TIMEOUT_NO_RESPONSE = "timeout_no_response"
 
 
 class Incident(Base):
@@ -142,7 +152,7 @@ class IncidentEvidence(Base):
     evidence_type: Mapped[EvidenceType] = mapped_column(
         Enum(EvidenceType, name="evidence_type_enum"), nullable=False
     )
-    file_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    file_url: Mapped[str] = mapped_column(Text, nullable=False)
     transcription: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_analysis: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
@@ -184,12 +194,18 @@ class WorkshopOffer(Base):
     )
     distance_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     ai_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    timeout_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     incident: Mapped["Incident"] = relationship("Incident", back_populates="offers")
+    workshop: Mapped["Workshop"] = relationship("Workshop", back_populates="offers")
 
 class Rating(Base):
     __tablename__ = "ratings"

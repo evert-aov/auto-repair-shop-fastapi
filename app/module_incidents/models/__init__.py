@@ -10,6 +10,7 @@ from app.module_incidents.models.models import (
     IncidentPriority,
     EvidenceType,
     OfferStatus,
+    RejectionReason,
     NotificationType,
     PaymentMethod,
     PaymentStatus,

@@ -11,7 +11,7 @@ from app.database import Base
 from app.module_users.models.models import User
 
 if TYPE_CHECKING:
-    from app.module_incidents.models import Payment, Rating
+    from app.module_incidents.models import Rating, Payment, WorkshopOffer
 
 
 class Specialty(Base):
@@ -66,6 +66,7 @@ class Workshop(Base):
     rejection_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
     last_rejection_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rejection_rate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, server_default=text("0.0"))
+    activity_points: Mapped[int] = mapped_column(Integer, nullable=False, default=50, server_default=text("50"))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("TRUE"))
     is_available: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("TRUE"))
     is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("FALSE"))
@@ -85,10 +86,11 @@ class Workshop(Base):
         creator=lambda specialty: WorkshopSpecialty(specialty=specialty),
     )
     technicians: Mapped[list["Technician"]] = relationship(
-        "Technician", back_populates="workshop"
+        "Technician", back_populates="workshop", foreign_keys="[Technician.workshop_id]"
     )
     ratings: Mapped[list["Rating"]] = relationship("Rating", back_populates="workshop")
     payments: Mapped[list["Payment"]] = relationship("Payment", back_populates="workshop")
+    offers: Mapped[list["WorkshopOffer"]] = relationship("WorkshopOffer", back_populates="workshop")
 
 
 class Technician(User):
@@ -107,7 +109,9 @@ class Technician(User):
     current_longitude: Mapped[Decimal | None] = mapped_column(Numeric(11, 8), nullable=True)
     is_available: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("TRUE"))
 
-    workshop: Mapped["Workshop"] = relationship("Workshop", back_populates="technicians")
+    workshop: Mapped["Workshop"] = relationship(
+        "Workshop", back_populates="technicians", foreign_keys="[Technician.workshop_id]"
+    )
 
     __mapper_args__ = {
         "polymorphic_identity": "technician",

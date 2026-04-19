@@ -1,7 +1,10 @@
+import asyncio
 import logging
+import os
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, get_db
@@ -71,16 +74,7 @@ def _process_incident_with_ai(incident_id: uuid.UUID) -> None:
         incident.ai_summary = classification.summary
 
         if classification.confidence > 0.4:
-            incident.status = IncidentStatus.MATCHED
-            incident_repository.save_incident(db, incident)
-            status_history_repository.log_status_change(
-                db,
-                incident_id=incident_id,
-                previous_status=IncidentStatus.ANALYZING.value,
-                new_status=IncidentStatus.MATCHED.value,
-                reason="AI classification successful",
-            )
-            assignment_service.find_and_create_offers(db, incident)
+            asyncio.run(assignment_service.find_and_create_offer(db, incident))
         else:
             incident.status = IncidentStatus.PENDING_INFO
             incident_repository.save_incident(db, incident)
@@ -110,7 +104,12 @@ def request_help(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    incident = incident_service.create_incident_request(db, current_user, incident_data)
+    logger.info(f"Incident request from user {current_user.id}: {incident_data.description[:50]}... vehicle={incident_data.vehicle_id}")
+    try:
+        incident = incident_service.create_incident_request(db, current_user, incident_data)
+    except Exception as e:
+        logger.error(f"Error creating incident: {e}", exc_info=True)
+        raise
 
     status_history_repository.log_status_change(
         db,
@@ -138,4 +137,45 @@ def request_help(
         status=incident.status.value,
         created_at=incident.created_at,
         message="Solicitud de auxilio recibida. Analizando...",
+    )
+
+
+_ALLOWED_MIME_TYPES = {
+    "image/jpeg", "image/png", "image/webp",
+    "audio/mpeg", "audio/mp4", "audio/aac",
+    "audio/wav", "audio/x-wav", "audio/ogg",
+    "audio/m4a", "audio/x-m4a",
+}
+
+_UPLOADS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+    "uploads",
+)
+
+
+@router.post(
+    "/upload-evidence",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_role("client"))],
+)
+async def upload_evidence(file: UploadFile = File(...)):
+    if file.content_type not in _ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tipo de archivo no permitido: {file.content_type}",
+        )
+
+    ext = (file.filename or "file").rsplit(".", 1)[-1].lower()
+    filename = f"{uuid.uuid4()}.{ext}"
+    dest = os.path.join(_UPLOADS_DIR, filename)
+
+    os.makedirs(_UPLOADS_DIR, exist_ok=True)
+    contents = await file.read()
+    with open(dest, "wb") as f:
+        f.write(contents)
+
+    evidence_type = "audio" if file.content_type.startswith("audio/") else "image"
+    return JSONResponse(
+        status_code=201,
+        content={"file_url": f"/uploads/{filename}", "evidence_type": evidence_type},
     )

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-from app.module_incidents.models import Incident, WorkshopOffer, IncidentStatus
+from app.module_incidents.models import Incident, WorkshopOffer, IncidentStatus, OfferStatus
 from app.module_incidents.repositories import (
     incident_repository,
     offer_repository,
@@ -28,6 +28,15 @@ _CATEGORY_TO_SPECIALTY: dict[str, str | None] = {
     "uncertain": None,
 }
 
+_COOLDOWN_DURATIONS: dict[str, timedelta] = {
+    "no_reason": timedelta(hours=1),
+    "busy": timedelta(hours=2),
+    "far_from_zone": timedelta(hours=6),
+    "no_parts": timedelta(minutes=30),
+    "no_technician": timedelta(hours=1),
+    "timeout_no_response": timedelta(hours=3),
+}
+
 
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6371.0
@@ -39,13 +48,8 @@ def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     )
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-## Calificacion de talleres
 
-def _calculate_ai_score(
-    distance_km: float,
-    workshop_rating: float,
-    incident_priority: str,
-) -> float:
+def _calculate_ai_score(distance_km: float, workshop_rating: float, incident_priority: str) -> float:
     distance_score = max(0.0, 1.0 - distance_km / 50.0)
     rating_score = workshop_rating / 5.0
     priority_weights = {"LOW": 0.3, "MEDIUM": 0.5, "HIGH": 0.8, "CRITICAL": 1.0}
@@ -53,18 +57,59 @@ def _calculate_ai_score(
     return round(distance_score * 0.4 + rating_score * 0.4 + priority_weight * 0.2, 3)
 
 
-def find_and_create_offers(db: Session, incident: Incident) -> None:
+def _calculate_activity_penalty(activity_points: int) -> float:
+    """
+    Returns penalty fraction (0.0 = no penalty, 1.0 = fully blocked).
+    - >= 50 pts: 0% penalty (normal)
+    - 0 pts: 100% penalty (blocked)
+    - Linear below 50
+    """
+    if activity_points <= 0:
+        return 1.0
+    if activity_points >= 50:
+        return 0.0
+    return (50 - activity_points) / 50.0
+
+
+def _is_in_cooldown(db: Session, workshop_id: uuid.UUID) -> bool:
+    last_rejection = (
+        db.query(WorkshopOffer)
+        .filter(
+            WorkshopOffer.workshop_id == workshop_id,
+            WorkshopOffer.status.in_([OfferStatus.REJECTED, OfferStatus.TIMEOUT]),
+            WorkshopOffer.rejected_at.isnot(None),
+        )
+        .order_by(WorkshopOffer.rejected_at.desc())
+        .first()
+    )
+
+    if not last_rejection:
+        return False
+
+    reason = last_rejection.rejection_reason or "no_reason"
+    duration = _COOLDOWN_DURATIONS.get(reason, timedelta(hours=1))
+    expires_at = last_rejection.rejected_at + duration
+    return datetime.now(timezone.utc) < expires_at
+
+
+async def find_and_create_offer(db: Session, incident: Incident) -> WorkshopOffer | None:
+    """
+    YANGO REAL N=1: find the best workshop, create a single exclusive offer.
+    Returns the created offer, or None if no candidates found.
+    """
+    from app.module_incidents.services.notification_service import NotificationService
+
     specialty_name = _CATEGORY_TO_SPECIALTY.get(incident.ai_category or "")
     if not specialty_name:
         logger.warning(f"No specialty mapping for ai_category={incident.ai_category!r}")
-        _mark_no_offers(db, incident)
-        return
+        await _mark_no_offers(db, incident)
+        return None
 
     specialty = workshop_repository.get_specialty_by_name(db, specialty_name)
     if not specialty:
         logger.warning(f"Specialty '{specialty_name}' not in database")
-        _mark_no_offers(db, incident)
-        return
+        await _mark_no_offers(db, incident)
+        return None
 
     workshops = workshop_repository.find_nearby_workshops(
         db,
@@ -77,46 +122,74 @@ def find_and_create_offers(db: Session, incident: Incident) -> None:
 
     scored: list[tuple] = []
     for workshop in workshops:
+        pts = workshop.activity_points if workshop.activity_points is not None else 50
+        if pts <= 0:
+            logger.debug(f"Workshop {workshop.id} blocked (activity_points=0)")
+            continue
+        if _is_in_cooldown(db, workshop.id):
+            logger.debug(f"Workshop {workshop.id} in cooldown, skipping")
+            continue
         technician = technician_repository.get_available_technician(db, workshop.id)
         if not technician:
             continue
+
         distance_km = _haversine(
-            incident.incident_lat, incident.incident_lng,
-            workshop.latitude, workshop.longitude,
+            incident.incident_lat,
+            incident.incident_lng,
+            float(workshop.latitude or 0),
+            float(workshop.longitude or 0),
         )
         priority_value = incident.ai_priority.value if incident.ai_priority else "MEDIUM"
-        ai_score = _calculate_ai_score(distance_km, workshop.rating_avg, priority_value)
-        scored.append((workshop, distance_km, ai_score))
+        base_score = _calculate_ai_score(distance_km, float(workshop.rating_avg), priority_value)
+        penalty = _calculate_activity_penalty(pts)
+        final_score = round(base_score * (1.0 - penalty), 3)
+        scored.append((workshop, distance_km, final_score))
 
     if not scored:
-        _mark_no_offers(db, incident)
-        return
+        await _mark_no_offers(db, incident)
+        return None
 
-    top_three = sorted(scored, key=lambda x: x[2], reverse=True)[:3]
+    winner_workshop, winner_distance, winner_score = max(scored, key=lambda x: x[2])
 
-    for workshop, distance_km, ai_score in top_three:
-        offer = WorkshopOffer(
-            incident_id=incident.id,
-            workshop_id=workshop.id,
-            status="notified",
-            distance_km=distance_km,
-            ai_score=ai_score,
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
-        )
-        offer_repository.save_offer(db, offer)
-        logger.info(
-            f"Offer → workshop={workshop.id} score={ai_score} dist={distance_km:.1f}km"
-        )
+    offer = WorkshopOffer(
+        incident_id=incident.id,
+        workshop_id=winner_workshop.id,
+        status=OfferStatus.NOTIFIED,
+        distance_km=winner_distance,
+        ai_score=winner_score,
+        notified_at=datetime.now(timezone.utc),
+        expires_at=datetime.now(timezone.utc) + timedelta(seconds=30),
+        timeout_minutes=30,
+    )
+    offer_repository.save_offer(db, offer)
 
-    closest_distance = top_three[0][1]
-    incident.estimated_arrival_min = int(closest_distance)
+    incident.estimated_arrival_min = int(winner_distance * 1.2)
+    incident.status = IncidentStatus.MATCHED
     incident_repository.save_incident(db, incident)
 
+    logger.info(
+        f"[YANGO N=1] Offer → workshop={winner_workshop.id} "
+        f"score={winner_score} dist={winner_distance:.1f}km "
+        f"activity_pts={winner_workshop.activity_points}"
+    )
 
-def _mark_no_offers(db: Session, incident: Incident) -> None:
+    notification_service = NotificationService(db)
+    await notification_service.notify_workshop_new_offer(
+        workshop=winner_workshop,
+        incident=incident,
+        offer=offer,
+    )
+
+    return offer
+
+
+async def _mark_no_offers(db: Session, incident: Incident) -> None:
+    from app.module_incidents.services.notification_service import NotificationService
+
     prev = incident.status.value if incident.status else None
     incident.status = IncidentStatus.NO_OFFERS
     incident_repository.save_incident(db, incident)
+
     status_history_repository.log_status_change(
         db,
         incident_id=incident.id,
@@ -124,3 +197,6 @@ def _mark_no_offers(db: Session, incident: Incident) -> None:
         new_status=IncidentStatus.NO_OFFERS.value,
         reason="No compatible workshops found",
     )
+
+    notification_service = NotificationService(db)
+    await notification_service.notify_client_no_workshops(incident)
