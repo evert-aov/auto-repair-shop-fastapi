@@ -37,12 +37,21 @@ class TechnicianRepository:
         self.db.commit()
         self.db.refresh(technician)
 
-def get_available_technician(db: Session, workshop_id: uuid.UUID) -> Technician | None:
-    return (
-        db.query(Technician)
-        .filter(
-            Technician.workshop_id == workshop_id,
-            Technician.is_available.is_(True),
-        )
-        .first()
-    )
+    def get_by_workshop(self, workshop_id: uuid.UUID) -> List[Technician]:
+        return self.db.query(Technician).options(
+            selectinload(Technician.roles)
+        ).filter(
+            Technician.workshop_id == workshop_id, 
+            Technician.is_active == True
+        ).all()
+
+    def update(self, technician: Technician) -> Technician:
+        self.db.commit()
+        self.db.refresh(technician)
+        return technician
+
+    def delete(self, technician: Technician):
+        # Soft delete
+        technician.is_active = False
+        self.db.commit()
+        self.db.refresh(technician)
