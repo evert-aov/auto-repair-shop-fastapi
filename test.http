@@ -1,0 +1,126 @@
+@baseUrl=http://localhost:8000
+@username=admin_client
+@password=admin123
+@audioFileName=test_audio.m4a
+@imageFile1Name=Gemini_Generated_Image_hfujc3hfujc3hfuj.png
+
+
+### 0. LOGIN (ADMIN)
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username={{username}}&password={{password}}
+
+
+### 1. VERIFICAR MI PERFIL
+# @name getMe
+GET {{baseUrl}}/api/auth/me
+Authorization: Bearer {{login.response.body.access_token}}
+
+@adminId = {{getMe.response.body.id}}
+
+### 4. LISTAR ROLES
+GET {{baseUrl}}/api/roles/
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 3. ASIGNAR ROL CLIENTE A ADMIN
+# (Usa el adminId y clientRoleId capturados abajo)
+POST {{baseUrl}}/api/roles/users/{{adminId}}/roles/{{clientRoleId}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 4. CREAR VEHÍCULO PARA ADMIN
+# @name createAdminVehicle
+POST {{baseUrl}}/api/vehicles/
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: application/json
+
+{
+    "client_id": "{{adminId}}",
+    "make": "Tesla",
+    "model": "Model 3",
+    "year": 2023,
+    "license_plate": "ADM-008",
+    "color": "Plata",
+    "transmission_type": "automatic",
+    "fuel_type": "electric"
+}
+
+### 5. SUBIR AUDIO
+# @name uploadAudioOnly
+POST {{baseUrl}}/api/incidents/ai/upload-audio?auto_transcribe=false
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: multipart/form-data; boundary=Boundary1
+
+--Boundary1
+Content-Disposition: form-data; name="file"; filename="{{audioFileName}}"
+Content-Type: audio/mp4
+
+< ./audios/{{audioFileName}}
+--Boundary1--
+
+
+### 6. TRANSCRIBIR AUDIO
+# @name manualTranscribe
+POST {{baseUrl}}/api/incidents/ai/transcribe
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: application/json
+
+{
+    "file_url": "{{uploadAudioOnly.response.body.file_url}}"
+}
+
+### 7. SUBIR IMAGEN
+# @name uploadImage1
+POST {{baseUrl}}/api/incidents/ai/upload-image
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: multipart/form-data; boundary=Boundary2
+
+--Boundary2
+Content-Disposition: form-data; name="file"; filename="{{imageFile1Name}}"
+Content-Type: image/png
+
+< ./images/{{imageFile1Name}}
+--Boundary2--
+
+### 10. SOLICITAR AUXILIO (PROCESO FINAL)
+# @name requestHelp
+POST {{baseUrl}}/api/incidents/request-help
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "description": "Hola buenas tardes, tengo un problema con mi bateria, no enciende el auto y hace un ruido raro  ",
+  "vehicle_id": "{{adminVehicleId}}",
+  "latitude": -17.7833,
+  "longitude": -63.1821,
+  "evidences": [
+    {
+      "evidence_type": "audio",
+      "file_url": "{{uploadAudioOnly.response.body.file_url}}",
+      "transcription": "{{transcript}}"
+    },
+    {
+      "evidence_type": "image",
+      "file_url": "{{uploadImage1.response.body.file_url}}"
+    }
+  ]
+}
+
+
+### 11. CONSULTAR ESTADO DEL INCIDENTE (Polling)
+
+# Ejecuta esto unos segundos después del Paso 10 para ver el resumen de la IA
+GET {{baseUrl}}/api/incidents/{{incidentId}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+###############################################################################
+# SECCIÓN DE CAPTURA DE VARIABLES (No ejecutar, solo para referencia interna)
+###############################################################################
+@token = {{login.response.body.access_token}}
+@adminId = {{getMe.response.body.id}}
+@clientRoleId = 12
+@adminVehicleId = {{createAdminVehicle.response.body.id}}
+@transcript = {{manualTranscribe.response.body.transcript}}
+@incidentId = {{requestHelp.response.body.id}}
+

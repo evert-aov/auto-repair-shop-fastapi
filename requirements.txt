@@ -44,6 +44,10 @@ uvicorn==0.42.0
 uvloop==0.22.1
 watchfiles==1.1.1
 websockets==16.0
+google-cloud-speech==2.33.0
+google-cloud-storage==2.19.0
+google-cloud-aiplatform==1.83.0
+Pillow==12.2.0
 
 passlib
 bcrypt

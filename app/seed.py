@@ -11,6 +11,13 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal, Base, engine
 from app.module_users.models.models import Permission, Role, User
 from app.module_workshops.models.models import Workshop, Technician, Specialty
+from app.security.models.models import Client, Vehicle, TransmissionType, FuelType
+from app.module_incidents.models.models import (
+    Incident, IncidentEvidence, IncidentStatusHistory, 
+    WorkshopOffer, Rating, Notification, Payment
+)
+
+
 
 
 def _hash(password: str) -> str:
@@ -105,12 +112,75 @@ OWNER_USER = {
     "phone": "77889900",
 }
 
+ADMIN_CLIENT_USER = {
+    "username": "admin_client",
+    "name": "Admin",
+    "last_name": "Cliente",
+    "email": "admin_client@autorepair.com",
+    "password": "admin123",
+    "phone": "70000001",
+    "address": "Sede Central Admin",
+}
+
+ADMIN_TECH_USER = {
+    "username": "admin_tech",
+    "name": "Admin",
+    "last_name": "Tecnico",
+    "email": "admin_tech@autorepair.com",
+    "password": "admin123",
+    "phone": "70000002",
+}
+
+
 DEFAULT_SPECIALTIES = [
     {"name": "Mecánica General"},
     {"name": "Electricidad"},
     {"name": "Chapería y Pintura"},
     {"name": "Frenos"},
 ]
+
+DEFAULT_CLIENTS = [
+    {
+        "username": "juanp",
+        "name": "Juan",
+        "last_name": "Pérez",
+        "email": "juanp@gmail.com",
+        "password": "client123",
+        "phone": "700112233",
+        "address": "Calle 1, Los Olivos",
+        "vehicles": [
+            {"make": "Toyota", "model": "Corolla", "year": 2020, "license_plate": "ABC-123", "color": "Blanco", "transmission_type": TransmissionType.automatic, "fuel_type": FuelType.gasoline},
+            {"make": "Suzuki", "model": "Swift", "year": 2018, "license_plate": "DEF-456", "color": "Rojo", "transmission_type": TransmissionType.manual, "fuel_type": FuelType.gasoline},
+        ]
+    },
+    {
+        "username": "mariag",
+        "name": "María",
+        "last_name": "García",
+        "email": "mariag@gmail.com",
+        "password": "client123",
+        "phone": "700445566",
+        "address": "Av. Principal 456",
+        "vehicles": [
+            {"make": "Honda", "model": "Civic", "year": 2021, "license_plate": "GHI-789", "color": "Gris", "transmission_type": TransmissionType.automatic, "fuel_type": FuelType.gasoline},
+            {"make": "Hyundai", "model": "Tucson", "year": 2019, "license_plate": "JKL-012", "color": "Azul", "transmission_type": TransmissionType.automatic, "fuel_type": FuelType.diesel},
+        ]
+    },
+    {
+        "username": "carlosl",
+        "name": "Carlos",
+        "last_name": "López",
+        "email": "carlosl@gmail.com",
+        "password": "client123",
+        "phone": "700778899",
+        "address": "Calle Secundaria 789",
+        "vehicles": [
+            {"make": "Ford", "model": "Ranger", "year": 2022, "license_plate": "MNO-345", "color": "Negro", "transmission_type": TransmissionType.manual, "fuel_type": FuelType.diesel},
+            {"make": "Kia", "model": "Sportage", "year": 2020, "license_plate": "PQR-678", "color": "Plateado", "transmission_type": TransmissionType.automatic, "fuel_type": FuelType.gasoline},
+        ]
+    }
+]
+
 
 
 def run_seed():
@@ -215,11 +285,34 @@ def run_seed():
                 total_services=0,
             )
             db.add(workshop)
-            print(f"  ✅ Taller de prueba creado: {workshop.name}")
+            db.flush()
+            
+            # Asignar especialidad Mecánica General al taller
+            spec = db.query(Specialty).filter(Specialty.name == "Mecánica General").first()
+            if spec:
+                from app.module_workshops.models.models import WorkshopSpecialty
+                ws = WorkshopSpecialty(workshop_id=workshop.id, specialty_id=spec.id)
+                db.add(ws)
+            
+            print(f"  ✅ Taller de prueba creado con especialidad: {workshop.name}")
+
         else:
             workshop = existing_workshop
             workshop_id = workshop.id
             workshop.owner_user_id = owner_id
+            
+            # Asignar TODAS las especialidades al taller para pruebas
+            all_specs = db.query(Specialty).all()
+            from app.module_workshops.models.models import WorkshopSpecialty
+            for spec in all_specs:
+                existing_ws = db.query(WorkshopSpecialty).filter_by(workshop_id=workshop.id, specialty_id=spec.id).first()
+                if not existing_ws:
+                    ws = WorkshopSpecialty(workshop_id=workshop.id, specialty_id=spec.id)
+                    db.add(ws)
+            
+            print(f"  ✅ Todas las especialidades vinculadas al taller: {workshop.name}")
+
+
 
         # 6. Crear dueño del taller (Technician)
         if owner:
@@ -241,6 +334,90 @@ def run_seed():
             owner.roles = [role_map["workshop_owner"], role_map["technician"]]
             db.add(owner)
             print(f"  ✅ Usuario dueño creado: {OWNER_USER['username']} / {OWNER_USER['password']}")
+
+        # 7. Crear Clientes y sus Vehículos
+        for c_data in DEFAULT_CLIENTS:
+            existing_client = db.query(Client).filter(Client.username == c_data["username"]).first()
+            if existing_client:
+                client = existing_client
+                print(f"  ⏭  Cliente ya existe: {c_data['username']}")
+            else:
+                vehicles_data = c_data.pop("vehicles")
+                password_plain = c_data.pop("password")
+                client = Client(
+                    **c_data,
+                    password=_hash(password_plain),
+                    type="client"
+                )
+                client.roles = [role_map["client"]]
+
+                db.add(client)
+                db.flush()
+                print(f"  ✅ Cliente creado: {c_data['username']}")
+                
+                for v_data in vehicles_data:
+                    existing_vehicle = db.query(Vehicle).filter(Vehicle.license_plate == v_data["license_plate"]).first()
+                    if not existing_vehicle:
+                        vehicle = Vehicle(**v_data, client_id=client.id)
+                        db.add(vehicle)
+                        print(f"      🚗 Vehículo creado: {v_data['make']} {v_data['model']} ({v_data['license_plate']})")
+                    else:
+                        print(f"      ⏭  Vehículo ya existe: {v_data['license_plate']}")
+
+        # 8. Crear Admin-Cliente (Híbrido)
+        existing_admin_client = db.query(Client).filter(Client.username == ADMIN_CLIENT_USER["username"]).first()
+        if not existing_admin_client:
+            admin_client = Client(
+                username=ADMIN_CLIENT_USER["username"],
+                name=ADMIN_CLIENT_USER["name"],
+                last_name=ADMIN_CLIENT_USER["last_name"],
+                email=ADMIN_CLIENT_USER["email"],
+                password=_hash(ADMIN_CLIENT_USER["password"]),
+                phone=ADMIN_CLIENT_USER["phone"],
+                address=ADMIN_CLIENT_USER["address"],
+                type="client"
+            )
+            admin_client.roles = [role_map["admin"], role_map["client"]]
+            db.add(admin_client)
+            db.flush()
+            print(f"  ✅ Admin-Cliente creado: {ADMIN_CLIENT_USER['username']}")
+            
+            # Vehículo para el admin_client
+            v_admin = Vehicle(
+                client_id=admin_client.id,
+                make="Porsche",
+                model="Taycan",
+                year=2023,
+                license_plate="ADM-999",
+                color="Dorado",
+                transmission_type=TransmissionType.automatic,
+                fuel_type=FuelType.electric
+            )
+            db.add(v_admin)
+            print(f"      🚗 Vehículo admin creado: {v_admin.license_plate}")
+        else:
+            print(f"  ⏭  Admin-Cliente ya existe")
+
+        # 9. Crear Admin-Tecnico (Híbrido)
+        existing_admin_tech = db.query(Technician).filter(Technician.username == ADMIN_TECH_USER["username"]).first()
+        if not existing_admin_tech:
+            admin_tech = Technician(
+                username=ADMIN_TECH_USER["username"],
+                name=ADMIN_TECH_USER["name"],
+                last_name=ADMIN_TECH_USER["last_name"],
+                email=ADMIN_TECH_USER["email"],
+                password=_hash(ADMIN_TECH_USER["password"]),
+                phone=ADMIN_TECH_USER["phone"],
+                workshop_id=workshop_id,
+                type="technician"
+            )
+            admin_tech.roles = [role_map["admin"], role_map["technician"]]
+            db.add(admin_tech)
+            print(f"  ✅ Admin-Tecnico creado: {ADMIN_TECH_USER['username']}")
+        else:
+            print(f"  ⏭  Admin-Tecnico ya existe")
+
+
 
         if hasattr(owner, "workshop_id"):
             owner.workshop_id = workshop_id

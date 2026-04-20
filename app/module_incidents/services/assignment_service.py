@@ -16,17 +16,18 @@ from app.module_workshops.repositories import workshop_repository, technician_re
 logger = logging.getLogger(__name__)
 
 _CATEGORY_TO_SPECIALTY: dict[str, str | None] = {
-    "battery": "battery",
-    "tire": "tire",
-    "engine": "engine",
-    "ac": "ac",
-    "transmission": "transmission",
-    "towing": "towing",
-    "locksmith": "locksmith",
-    "general": "general",
-    "collision": "general",
+    "battery": "Electricidad",
+    "tire": "Frenos",
+    "engine": "Mecánica General",
+    "ac": "Electricidad",
+    "transmission": "Mecánica General",
+    "towing": "Mecánica General",
+    "locksmith": "Mecánica General",
+    "general": "Mecánica General",
+    "collision": "Chapería y Pintura",
     "uncertain": None,
 }
+
 
 
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
