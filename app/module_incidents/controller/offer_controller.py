@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.module_incidents.models import RejectionReason, WorkshopOffer, OfferStatus
 from app.module_incidents.services.offer_service import OfferService
+from app.module_incidents.ai.services import storage_service
 from app.module_users.models import User
 from app.security.config.security import get_current_user, require_role
 
@@ -242,6 +243,7 @@ async def get_my_offers(
         return []
     
     workshop_ids = [w.id for w in workshops]
+    workshop_dict = {w.id: w for w in workshops}
     
     # Obtener offers pendientes
     offers = db.query(WorkshopOffer).filter(
@@ -256,8 +258,9 @@ async def get_my_offers(
         from app.module_incidents.repositories import incident_repository
         
         incident = incident_repository.get_incident_by_id(db, offer.incident_id)
+        workshop = workshop_dict.get(offer.workshop_id)
         
-        if incident:
+        if incident and workshop:
             result.append({
                 "offer_id": offer.id,
                 "incident_id": incident.id,
@@ -275,7 +278,108 @@ async def get_my_offers(
                     "ai_summary": incident.ai_summary,
                     "latitude": incident.incident_lat,
                     "longitude": incident.incident_lng,
+                    "evidence_urls": [
+                        storage_service.generate_signed_url(e.file_url) 
+                        for e in incident.evidences if e.evidence_type.value.lower() == "image"
+                    ]
+                },
+                "workshop": {
+                    "latitude": workshop.latitude,
+                    "longitude": workshop.longitude,
                 }
             })
     
     return result
+
+@router.get(
+    "/my-active",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_role("workshop_owner"))],
+)
+async def get_my_active_offers(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.module_workshops.repositories import workshop_repository
+    from app.module_incidents.repositories import offer_repository
+    from app.module_incidents.repositories import incident_repository
+
+    workshops = workshop_repository.get_workshops_by_owner(db, current_user.id)
+    if not workshops:
+        return []
+
+    workshop_ids = [w.id for w in workshops]
+    workshop_dict = {w.id: w for w in workshops}
+
+    result = []
+    for w_id in workshop_ids:
+        active_offers = offer_repository.get_active_offers_by_workshop(db, w_id)
+        for offer in active_offers:
+            incident = incident_repository.get_incident_by_id(db, offer.incident_id)
+            workshop = workshop_dict.get(offer.workshop_id)
+            
+            if incident and workshop:
+                result.append({
+                    "offer_id": offer.id,
+                    "incident_id": incident.id,
+                    "workshop_id": offer.workshop_id,
+                    "status": offer.status.value,
+                    "distance_km": offer.distance_km,
+                    "ai_score": offer.ai_score,
+                    "created_at": offer.created_at,
+                    "estimated_arrival_min": incident.estimated_arrival_min,
+                    "incident": {
+                        "description": incident.description,
+                        "ai_category": incident.ai_category,
+                        "ai_priority": incident.ai_priority.value if incident.ai_priority else None,
+                        "ai_summary": incident.ai_summary,
+                        "latitude": incident.incident_lat,
+                        "longitude": incident.incident_lng,
+                        "evidence_urls": [
+                            storage_service.generate_signed_url(e.file_url) 
+                            for e in incident.evidences if e.evidence_type.value.lower() == "image"
+                        ]
+                    },
+                    "workshop": {
+                        "latitude": workshop.latitude,
+                        "longitude": workshop.longitude,
+                    }
+                })
+    return result
+
+@router.post(
+    "/{offer_id}/complete",
+    response_model=OfferResponseDto,
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_role("workshop_owner"))],
+)
+async def complete_offer(
+    offer_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.module_incidents.repositories import offer_repository
+    from app.module_workshops.repositories import workshop_repository
+    from app.module_incidents.repositories import incident_repository
+    from app.module_incidents.models import IncidentStatus, OfferStatus
+    
+    offer = offer_repository.get_offer_by_id(db, offer_id)
+    if not offer:
+        raise HTTPException(status_code=404, detail="Offer not found")
+
+    workshop = workshop_repository.get_workshop_by_id(db, offer.workshop_id)
+    if not workshop or workshop.owner_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your workshop")
+        
+    incident = incident_repository.get_incident_by_id(db, offer.incident_id)
+    if incident:
+        incident.status = IncidentStatus.COMPLETED
+        incident_repository.save_incident(db, incident)
+        
+    return OfferResponseDto(
+        offer_id=offer.id,
+        incident_id=offer.incident_id,
+        workshop_id=workshop.id,
+        status="completed",
+        message="Servicio completado exitosamente",
+    )

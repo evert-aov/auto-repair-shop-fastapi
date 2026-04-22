@@ -7,6 +7,7 @@ class TechnicianRepository:
     def __init__(self, db: Session):
         self.db = db
 
+
     def create(self, technician: Technician) -> Technician:
         self.db.add(technician)
         self.db.commit()
@@ -55,3 +56,10 @@ class TechnicianRepository:
         technician.is_active = False
         self.db.commit()
         self.db.refresh(technician)
+
+def get_available_technician(db: Session, workshop_id: uuid.UUID) -> Optional[Technician]:
+    return db.query(Technician).filter(
+        Technician.workshop_id == workshop_id,
+        Technician.is_active == True,
+        Technician.is_available == True
+    ).first()

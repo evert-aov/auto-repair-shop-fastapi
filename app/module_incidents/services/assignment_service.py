@@ -158,7 +158,7 @@ async def find_and_create_offer(db: Session, incident: Incident) -> WorkshopOffe
         distance_km=winner_distance,
         ai_score=winner_score,
         notified_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc) + timedelta(seconds=30),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
         timeout_minutes=30,
     )
     offer_repository.save_offer(db, offer)
