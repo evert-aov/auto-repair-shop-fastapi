@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -11,6 +12,10 @@ from app.security.dto.auth_dtos import LoginRequestDto, LoginResponseDto, Profil
 from app.security.service import auth_service, client_service
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
+
+
+class FcmTokenDto(BaseModel):
+    token: str
 
 
 @router.post("/login", response_model=LoginResponseDto)
@@ -50,6 +55,21 @@ def update_profile(
     if updated.type == "client":
         return ClientResponseDTO.model_validate(updated)
     return UserResponseDto.model_validate(updated)
+
+
+@router.post("/fcm-token", status_code=status.HTTP_200_OK)
+def register_fcm_token(
+    data: FcmTokenDto,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Registra o actualiza el FCM token del dispositivo del usuario autenticado.
+    Flutter y Angular deben llamar esto justo después del login.
+    """
+    current_user.fcm_token = data.token
+    db.commit()
+    return {"message": "FCM token registrado correctamente"}
 
 
 # ── Endpoints protegidos por rol (ejemplos de uso de require_role) ──────────
