@@ -24,4 +24,4 @@ COPY . .
 # Comando de inicio:
 # 1. Ejecutar migraciones de base de datos
 # 2. Iniciar uvicorn usando la variable de entorno $PORT (requerido por Cloud Run)
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT
