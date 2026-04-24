@@ -13,7 +13,7 @@ from PIL import Image, ImageEnhance, ImageOps
 from vertexai.generative_models import GenerationConfig, GenerativeModel, Part, Tool
 
 from app.module_incidents.ai.dtos.ai_dtos import ClassificationResult
-from app.module_incidents.ai.services.storage_service import get_storage_client
+from app.module_incidents.ai.services.storage_service import get_storage_client, enhance_image
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,9 @@ _KEYWORD_MAP: dict[str, tuple[str, str]] = {
     "tow": ("towing", "MEDIUM"),
     "llave": ("locksmith", "MEDIUM"),
     "lock": ("locksmith", "MEDIUM"),
+    "mecanico": ("general", "MEDIUM"),
+    "choca": ("general", "HIGH"),
+    "golpe": ("general", "HIGH"),
     "choque": ("general", "HIGH"),
     "collision": ("general", "HIGH"),
 }
@@ -83,34 +86,24 @@ def _download_image(file_url: str) -> bytes:
         with urlopen(file_url, timeout=HTTP_IMAGE_TIMEOUT) as response:
             return response.read()
 
-    raise ValueError("Only gs://, http://, and https:// URLs are supported for images")
+    # Soporte para archivos locales (uploads)
+    if file_url.startswith("/uploads/"):
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        local_path = os.path.join(project_root, file_url.lstrip("/"))
+        if os.path.exists(local_path):
+            with open(local_path, "rb") as f:
+                return f.read()
+        raise FileNotFoundError(f"Local evidence file not found: {local_path}")
+
+    raise ValueError("Only gs://, http://, https://, and local /uploads/ URLs are supported for images")
 
 
-def _enhance_image(image_bytes: bytes) -> tuple[bytes, dict]:
-    with Image.open(io.BytesIO(image_bytes)) as img:
-        img = ImageOps.exif_transpose(img).convert("RGB")
-        original_size = img.size
-
-        max_side = 1600
-        img.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
-        img = ImageEnhance.Contrast(img).enhance(1.12)
-        img = ImageEnhance.Sharpness(img).enhance(1.08)
-
-        out = io.BytesIO()
-        img.save(out, format="JPEG", quality=88, optimize=True)
-        enhanced_bytes = out.getvalue()
-
-    preprocessing = {
-        "original_size": {"width": original_size[0], "height": original_size[1]},
-        "enhanced_size": {"width": img.size[0], "height": img.size[1]},
-        "output_format": "image/jpeg",
-    }
-    return enhanced_bytes, preprocessing
+# Eliminado enhance_image de aquí, movido a storage_service.py para evitar importes circulares.
 
 
 def prepare_image_for_vertex(file_url: str) -> PreparedImage:
     original = _download_image(file_url)
-    enhanced, preprocessing = _enhance_image(original)
+    enhanced, preprocessing = enhance_image(original)
     return PreparedImage(
         source_url=file_url,
         content=enhanced,
@@ -124,8 +117,9 @@ def prepare_image_for_vertex(file_url: str) -> PreparedImage:
 def _build_triage_prompt(description: str, audio_transcript: str | None) -> str:
     transcript = (audio_transcript or "").strip()
     return (
-        "You are an automotive incident triage assistant. Analyze the provided accident images and text. "
-        "Respond ONLY in valid JSON with this exact structure (do not use markdown blocks, just raw JSON):\n"
+        "Eres un experto en triaje técnico automotriz. Tu audiencia es un mecánico profesional.\n"
+        "Analiza las imágenes y el texto proporcionado para dar un diagnóstico profundo.\n"
+        "Responde EXCLUSIVAMENTE en JSON con esta estructura:\n"
         "{\n"
         "  \"sistema\": {\n"
         "    \"categoria\": \"categoria_elegida\",\n"
@@ -135,9 +129,9 @@ def _build_triage_prompt(description: str, audio_transcript: str | None) -> str:
         "    \"confianza\": 0.9\n"
         "  },\n"
         "  \"tecnico\": {\n"
-        "    \"diagnostico_tecnico\": \"string\",\n"
-        "    \"herramientas_sugeridas\": [\"string\"],\n"
-        "    \"procedimiento_recomendado\": \"string\"\n"
+        "    \"diagnostico_tecnico\": \"Explicación detallada de la falla, componentes afectados y severidad técnica.\",\n"
+        "    \"herramientas_sugeridas\": [\"Herramienta 1\", \"Herramienta 2\"],\n"
+        "    \"procedimiento_recomendado\": \"Pasos detallados para la inspección y reparación inicial.\"\n"
         "  },\n"
         "  \"cliente\": {\n"
         "    \"mensaje_tranquilizador\": \"string\",\n"
@@ -145,12 +139,12 @@ def _build_triage_prompt(description: str, audio_transcript: str | None) -> str:
         "    \"consejo_seguridad\": \"string\"\n"
         "  }\n"
         "}\n"
-        "Rules: The category MUST be EXACTLY ONE OF [battery, tire, collision, engine, ac, transmission, towing, locksmith, general, uncertain]. "
-        "The priority MUST be ONE OF [LOW, MEDIUM, HIGH, CRITICAL]. "
-        "The requiere_grua MUST be a boolean. The especialidad_requerida MUST be ONE OF [electricidad, mecanica_general, chapa_pintura, neumaticos, otro]. "
-        "confianza must be a float between 0 and 1. If uncertain, use categoria=uncertain and confidence <= 0.5. "
-        f"Description from user: {description}\n"
-        f"Audio transcript (Spanish): {transcript or 'N/A'}"
+        "Reglas:\n"
+        "- En diagnostico_tecnico, sé muy específico (ej. 'Falla en el solenoide de arranque' en lugar de 'no prende').\n"
+        "- En procedimiento_recomendado, describe al menos 3 pasos de inspección.\n"
+        "- Categorías: [battery, tire, collision, engine, ac, transmission, towing, locksmith, general, uncertain].\n"
+        f"Contexto del usuario: {description}\n"
+        f"Transcripción de audio: {transcript or 'N/A'}"
     )
 
 
@@ -245,29 +239,36 @@ def _normalize_triage_result(payload: dict) -> dict:
     }
 
 
-def analyze_incident(
-        description: str,
-        audio_transcript: Optional[str],
-        prepared_images: List[PreparedImage],
+def analyze_incident_multimodal(
+    description: str,
+    image_urls: List[str]
 ) -> Optional[dict]:
-    """Unified multimodal triage (previously vision_service)"""
+    """
+    Unified multimodal triage. Handles image preparation internally.
+    """
     if not VERTEX_PROJECT_ID:
         logger.warning("VERTEX_PROJECT_ID is not configured")
         return None
 
-    if not prepared_images:
-        # Fallback to text classification if no images are provided
-        logger.info("No images provided, falling back to text analysis")
-        return None
-
     try:
+        # 1. Preparar imágenes
+        prepared_parts = []
+        for url in image_urls:
+            try:
+                img_data = _download_image(url)
+                prepared_parts.append(Part.from_data(data=img_data, mime_type="image/jpeg"))
+            except Exception as e:
+                logger.warning(f"Could not prepare image {url} for Vertex: {e}")
+
+        # 2. Inicializar modelo
         vertexai.init(project=VERTEX_PROJECT_ID, location=VERTEX_LOCATION)
         model = GenerativeModel(VERTEX_MODEL_NAME)
 
-        parts = [_build_triage_prompt(description, audio_transcript)]
-        for img in prepared_images:
-            parts.append(Part.from_data(data=img.content, mime_type=img.mime_type))
+        # 3. Construir prompt y contenido
+        prompt = _build_triage_prompt(description, None)
+        parts = [prompt] + prepared_parts
 
+        # 4. Generar contenido
         response = model.generate_content(
             parts,
             generation_config=GenerationConfig(
@@ -286,7 +287,11 @@ def analyze_incident(
 
     except Exception as exc:
         logger.exception("Vertex triage analysis failed: %s", exc)
-        return None
+        return {
+            "sistema": {"categoria": "general", "prioridad": "MEDIUM", "confianza": 0.1},
+            "cliente": {"mensaje_tranquilizador": "Estamos analizando su caso."},
+            "tecnico": {"diagnostico_tecnico": f"Error en IA: {exc}"}
+        }
 
 
 def estimate_cost_grounded(diagnostic: str, category: str) -> Optional[dict]:
@@ -329,7 +334,7 @@ def classify_text_only(
 
     category = "general"
     priority = "MEDIUM"
-    confidence = 0.45
+    confidence = 0.60
     summary = description[:200]
 
     for keyword, (cat, prio) in _KEYWORD_MAP.items():

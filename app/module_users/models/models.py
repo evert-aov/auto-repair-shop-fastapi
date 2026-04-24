@@ -53,6 +53,9 @@ class User(Base):
     # Campo discriminador para la herencia
     type: Mapped[str] = mapped_column(String(50), nullable=False)
 
+    # Token FCM para notificaciones push (se actualiza desde app al hacer login)
+    fcm_token: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     __mapper_args__ = {
         "polymorphic_on": type,
         "polymorphic_identity": "user",

@@ -39,6 +39,11 @@ class RejectOfferDto(BaseModel):
     rejection_reason: str | None = None  # busy | far_from_zone | no_parts | etc.
 
 
+class CompleteOfferDto(BaseModel):
+    """Request body para completar una oferta"""
+    cost: float | None = None
+
+
 class OfferResponseDto(BaseModel):
     """Response estándar para ofertas"""
     offer_id: uuid.UUID
@@ -276,6 +281,7 @@ async def get_my_offers(
                     "ai_category": incident.ai_category,
                     "ai_priority": incident.ai_priority.value if incident.ai_priority else None,
                     "ai_summary": incident.ai_summary,
+                    "vertex_analysis": incident.vertex_analysis,
                     "latitude": incident.incident_lat,
                     "longitude": incident.incident_lng,
                     "evidence_urls": [
@@ -333,6 +339,7 @@ async def get_my_active_offers(
                         "ai_category": incident.ai_category,
                         "ai_priority": incident.ai_priority.value if incident.ai_priority else None,
                         "ai_summary": incident.ai_summary,
+                        "vertex_analysis": incident.vertex_analysis,
                         "latitude": incident.incident_lat,
                         "longitude": incident.incident_lng,
                         "evidence_urls": [
@@ -355,6 +362,7 @@ async def get_my_active_offers(
 )
 async def complete_offer(
     offer_id: uuid.UUID,
+    data: CompleteOfferDto,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -373,8 +381,49 @@ async def complete_offer(
         
     incident = incident_repository.get_incident_by_id(db, offer.incident_id)
     if incident:
+        from app.module_incidents.repositories import status_history_repository
+        from app.module_incidents.models import IncidentStatus, NotificationType
+        
+        prev_status = incident.status.value if incident.status else None
         incident.status = IncidentStatus.COMPLETED
+        if data.cost is not None:
+            incident.total_cost = data.cost
+        
         incident_repository.save_incident(db, incident)
+        
+        # [1.2] Liberar al técnico asignado
+        if incident.assigned_technician_id:
+            from app.module_workshops.models.models import Technician
+            assigned_tech = db.query(Technician).filter_by(id=incident.assigned_technician_id).first()
+            if assigned_tech:
+                assigned_tech.is_available = True
+                db.commit()
+                logger.info(f"🔓 Técnico {assigned_tech.name} liberado y DISPONIBLE nuevamente")
+        
+        # Bonificación por trabajo bien hecho (+10 pts)
+        workshop.activity_points = min(100, (workshop.activity_points or 0) + 10)
+        workshop_repository.save_workshop(db, workshop)
+        
+        # Log de historial
+        status_history_repository.log_status_change(
+            db,
+            incident_id=incident.id,
+            previous_status=prev_status,
+            new_status=IncidentStatus.COMPLETED.value,
+            reason="Servicio completado por el taller"
+        )
+        
+        # Notificación al cliente
+        from app.module_incidents.services.notification_service import NotificationService
+        notifier = NotificationService(db)
+        await notifier._send_notification(
+            user_id=incident.client_id,
+            notification_type=NotificationType.STATUS_UPDATE,
+            title="✅ Servicio finalizado",
+            body=f"El taller {workshop.name} ha completado tu servicio. ¡Gracias!",
+            incident_id=incident.id,
+            priority="high"
+        )
         
     return OfferResponseDto(
         offer_id=offer.id,

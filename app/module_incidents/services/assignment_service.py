@@ -24,7 +24,8 @@ _CATEGORY_TO_SPECIALTY: dict[str, str | None] = {
     "towing": "towing",
     "locksmith": "locksmith",
     "general": "general",
-    "collision": "general",
+    "collision": "general",  # Mapeado a mecánica general por ahora
+    "incierto": None,
     "uncertain": None,
 }
 
@@ -117,20 +118,25 @@ async def find_and_create_offer(db: Session, incident: Incident) -> WorkshopOffe
         longitude=incident.incident_lng,
         specialty_id=specialty.id,
         radius_km=50.0,
-        min_rating=3.5,
+        min_rating=1.0,
     )
+    
+    logger.warning(f"🔎 Talleres cercanos encontrados con especialidad '{specialty_name}': {len(workshops)}")
 
     scored: list[tuple] = []
     for workshop in workshops:
         pts = workshop.activity_points if workshop.activity_points is not None else 50
         if pts <= 0:
-            logger.debug(f"Workshop {workshop.id} blocked (activity_points=0)")
+            logger.warning(f"❌ Taller {workshop.name} descartado: 0 puntos de actividad")
             continue
+            
         if _is_in_cooldown(db, workshop.id):
-            logger.debug(f"Workshop {workshop.id} in cooldown, skipping")
+            logger.warning(f"❌ Taller {workshop.name} descartado: Está en Cooldown")
             continue
+            
         technician = technician_repository.get_available_technician(db, workshop.id)
         if not technician:
+            logger.warning(f"❌ Taller {workshop.name} descartado: No tiene técnicos disponibles")
             continue
 
         distance_km = _haversine(
@@ -139,6 +145,8 @@ async def find_and_create_offer(db: Session, incident: Incident) -> WorkshopOffe
             float(workshop.latitude or 0),
             float(workshop.longitude or 0),
         )
+        logger.warning(f"✅ Taller {workshop.name} APTO. Distancia: {distance_km:.2f}km")
+        
         priority_value = incident.ai_priority.value if incident.ai_priority else "MEDIUM"
         base_score = _calculate_ai_score(distance_km, float(workshop.rating_avg), priority_value)
         penalty = _calculate_activity_penalty(pts)
@@ -146,6 +154,7 @@ async def find_and_create_offer(db: Session, incident: Incident) -> WorkshopOffe
         scored.append((workshop, distance_km, final_score))
 
     if not scored:
+        logger.warning(f"⚠️ No quedó ningún taller apto después de los filtros para el incidente {incident.id}")
         await _mark_no_offers(db, incident)
         return None
 

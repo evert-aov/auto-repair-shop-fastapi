@@ -18,6 +18,7 @@ from app.module_incidents.repositories import (
     status_history_repository,
 )
 from app.module_incidents.services.notification_service import NotificationService
+from app.module_workshops.models.models import Technician
 from app.module_workshops.repositories import workshop_repository
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ ACTIVITY_PENALTIES: dict[RejectionReason, int] = {
     RejectionReason.FAR_FROM_ZONE: 15,
     RejectionReason.NO_PARTS: 3,
     RejectionReason.NO_TECHNICIAN: 5,
-    RejectionReason.TIMEOUT_NO_RESPONSE: 20,
+    RejectionReason.TIMEOUT_NO_RESPONSE: 10, # Suavizado de 20 a 10 para pruebas
 }
 
 
@@ -69,6 +70,12 @@ class OfferService:
         incident.assigned_workshop_id = workshop.id
         if technician_id:
             incident.assigned_technician_id = technician_id
+            # [1.1] Marcar técnico como OCUPADO
+            assigned_tech = self.db.query(Technician).filter_by(id=technician_id).first()
+            if assigned_tech:
+                assigned_tech.is_available = False
+                self.db.commit()
+                logger.info(f"🔒 Técnico {assigned_tech.name} marcado como OCUPADO")
         if estimated_arrival_min:
             incident.estimated_arrival_min = estimated_arrival_min
         elif offer.distance_km:

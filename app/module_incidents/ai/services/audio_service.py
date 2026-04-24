@@ -27,7 +27,7 @@ GOOGLE_SPEECH_CREDENTIALS_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_SPEEC
 
 
 def _build_speech_client() -> speech.SpeechClient:
-    if GOOGLE_SPEECH_CREDENTIALS_PATH:
+    if GOOGLE_SPEECH_CREDENTIALS_PATH and os.path.exists(GOOGLE_SPEECH_CREDENTIALS_PATH):
         credentials = service_account.Credentials.from_service_account_file(
             GOOGLE_SPEECH_CREDENTIALS_PATH
         )
@@ -72,7 +72,10 @@ def _chunk_audio(input_path: Path, output_dir: Path, segment_time: int = 40) -> 
         str(output_pattern)
     ]
     
-    process = subprocess.run(command, capture_output=True, text=True)
+    try:
+        process = subprocess.run(command, capture_output=True, text=True, timeout=60) # Timeout de 60s para FFmpeg
+    except subprocess.TimeoutExpired:
+        raise ValueError("FFmpeg tardó demasiado en procesar el audio")
     if process.returncode != 0:
         raise ValueError(f"Fallo al dividir el audio en chunks: {process.stderr.strip() or 'error desconocido'}")
 
@@ -113,9 +116,10 @@ def transcribe_audio(file_url: str) -> str | None:
     try:
         with tempfile.TemporaryDirectory(prefix="stt-chunking-") as tmp_dir:
             tmp_path = Path(tmp_dir)
-            input_file = tmp_path / "input_audio.flac"
+            # No forzamos extensión para que FFmpeg detecte el contenedor original
+            input_file = tmp_path / "original_audio"
             
-            logger.info("Downloading audio for chunking: %s", file_url)
+            logger.info("Downloading audio for processing: %s", file_url)
             _download_file(file_url, input_file)
             
             chunk_paths = _chunk_audio(input_file, tmp_path, segment_time=40)
@@ -133,11 +137,13 @@ def transcribe_audio(file_url: str) -> str | None:
                     for i, cp in enumerate(chunk_paths)
                 }
                 
-                for future in concurrent.futures.as_completed(future_to_index):
+                for future in concurrent.futures.as_completed(future_to_index, timeout=120): # Timeout total de 2 min
                     idx = future_to_index[future]
                     try:
-                        transcript_chunk = future.result()
+                        transcript_chunk = future.result(timeout=30) # Cada trozo tiene 30s
                         chunk_results[idx] = transcript_chunk
+                    except concurrent.futures.TimeoutError:
+                        logger.error("Timeout transcribing chunk %d", idx)
                     except Exception as e:
                         logger.error("Error transcribing chunk %d: %s", idx, e)
             

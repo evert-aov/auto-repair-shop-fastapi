@@ -67,109 +67,90 @@ def _process_incident_with_ai(incident_id: uuid.UUID) -> None:
         image_evidences = []
 
         try:
-            for ev in evidences:
+            # 1. Obtener todas las evidencias (usando la relación del modelo)
+            evidence_list = incident.evidences
+            image_evidences = []
+            text_from_evidences = []
+
+            for ev in evidence_list:
                 if ev.evidence_type.value == "audio":
-                    audio_transcript = audio_service.transcribe_audio(ev.file_url)
-                    if audio_transcript:
-                        ev.transcription = audio_transcript
+                    t = audio_service.transcribe_audio(ev.file_url)
+                    if t:
+                        ev.transcription = t
                         evidence_repository.save_evidence(db, ev)
+                        text_from_evidences.append(f"[Audio]: {t}")
+                elif ev.evidence_type.value == "text":
+                    if ev.transcription:
+                        text_from_evidences.append(f"[Nota adicional]: {ev.transcription}")
                 elif ev.evidence_type.value == "image":
                     image_evidences.append(ev)
             
-            # [UNIFICADO] Uso de vertex_service
-            triage_result = None
-            if image_evidences:
-                prepared_images = []
-                for ev in image_evidences:
-                    try:
-                        prepared_images.append(vertex_service.prepare_image_for_vertex(ev.file_url))
-                    except Exception as e:
-                        logger.warning(f"Failed to prepare image {ev.file_url}: {e}")
+            # Construir el contexto de texto completo
+            full_context = [f"Descripción inicial: {incident.description}"]
+            full_context.extend(text_from_evidences)
+            full_description = "\n".join(full_context)
 
-                triage_result = vertex_service.analyze_incident(
-                    description=incident.description,
-                    audio_transcript=audio_transcript,
-                    prepared_images=prepared_images,
-                )
-            
-            # Si no hay imágenes o falló el análisis multimodal, usar fallback de texto
-            if not triage_result:
-                text_classification = vertex_service.classify_text_only(
-                    description=incident.description,
-                    audio_transcript=audio_transcript
-                )
-                triage_result = {
-                    "sistema": {
-                        "categoria": text_classification.category,
-                        "prioridad": text_classification.priority,
-                        "confianza": text_classification.confidence,
-                        "requiere_grua": False,
-                        "especialidad_requerida": "otro"
-                    },
-                    "cliente": { "mensaje_tranquilizador": text_classification.summary }
-                }
+            # 2. Análisis IA Multimodal
+            triage_result = vertex_service.analyze_incident_multimodal(
+                description=full_description,
+                image_urls=[ev.file_url for ev in image_evidences]
+            )
 
-            # Guardar resultados en el incidente
+            # 3. Guardar resultados básicos
             sistema = triage_result.get("sistema", {})
+            cliente = triage_result.get("cliente", {})
             incident.ai_category = sistema.get("categoria", "general")
             incident.ai_priority = sistema.get("prioridad", "MEDIUM")
             incident.ai_confidence = sistema.get("confianza", 0.5)
 
-            # Formatear el ai_summary
-            tecnico = triage_result.get("tecnico")
-            if tecnico:
-                diag = tecnico.get("diagnostico_tecnico", "Sin diagnóstico")
-                herramientas = ", ".join(tecnico.get("herramientas_sugeridas", []))
-                proc = tecnico.get("procedimiento_recomendado", "")
-                incident.ai_summary = f"DIAGNÓSTICO TÉCNICO:\n{diag}\n\nHERRAMIENTAS:\n{herramientas}\n\nPROCEDIMIENTO:\n{proc}"
-            else:
-                incident.ai_summary = triage_result.get("cliente", {}).get("mensaje_tranquilizador", incident.description)
+            # 4. Formatear resumen y costo
+            summary_parts = [cliente.get("mensaje_tranquilizador", "Estamos analizando su problema.")]
+            if cliente.get("posible_causa"): summary_parts.append(f"Posible causa: {cliente['posible_causa']}")
+            if cliente.get("consejo_seguridad"): summary_parts.append(f"Consejo: {cliente['consejo_seguridad']}")
 
-            # [SEPARADO] Estimación de costos con Grounding
-            diagnostic_for_est = tecnico.get("diagnostico_tecnico", incident.description) if tecnico else incident.description
-            estimation = vertex_service.estimate_cost_grounded(diagnostic_for_est, incident.ai_category)
+            # Estimación Grounded
+            tecnico_info = triage_result.get("tecnico", {})
+            diagnostic = tecnico_info.get("diagnostico_tecnico", full_description)
+            estimation = vertex_service.estimate_cost_grounded(diagnostic, incident.ai_category)
             
             if estimation and "costo_estimado" in estimation:
                 triage_result["costo_estimado"] = estimation["costo_estimado"]
-
-            # Actualizar evidencias con el análisis final
+                costo_data = estimation["costo_estimado"]
+                if isinstance(costo_data, dict):
+                    min_v, max_v = costo_data.get("min", 0), costo_data.get("max", 0)
+                    if max_v > 0:
+                        summary_parts.append(f"Estimación inicial: {min_v} - {max_v} BOB")
+                else:
+                    summary_parts.append(f"Estimación inicial: {costo_data} BOB")
+            
+            # [CRÍTICO] Separación de campos
+            incident.ai_summary = "\n\n".join(summary_parts) # Para el CLIENTE
+            incident.vertex_analysis = triage_result        # Para el TALLER (contiene el diagnóstico técnico)
+            
+            # Guardar también en las evidencias para redundancia
             for ev in image_evidences:
-                current = dict(ev.ai_analysis) if ev.ai_analysis else {}
-                current["vertex"] = triage_result
-                ev.ai_analysis = current
+                ev.ai_analysis = {"vertex": triage_result}
                 evidence_repository.save_evidence(db, ev)
+            if incident.ai_category in ["incierto", "uncertain"] or incident.ai_confidence < 0.4:
+                incident.status = IncidentStatus.PENDING_INFO
+                incident_repository.save_incident(db, incident)
+            else:
+                incident.status = IncidentStatus.MATCHED
+                incident_repository.save_incident(db, incident)
+                
+                # Búsqueda de talleres (encapsulada para no romper el flujo)
+                try:
+                    logger.info(f"✨ IA Finalizada para {incident_id}. Buscando talleres...")
+                    asyncio.run(assignment_service.find_and_create_offer(db, incident))
+                except Exception as e:
+                    logger.error(f"Error en asignación de talleres: {e}")
 
         except Exception as exc:
-            logger.error(f"Evidence processing error for incident {incident_id}: {exc}")
+            logger.error(f"FALLO CRÍTICO IA para incidente {incident_id}: {exc}")
             incident.status = IncidentStatus.ERROR
             incident_repository.save_incident(db, incident)
-            status_history_repository.log_status_change(
-                db,
-                incident_id=incident_id,
-                previous_status=IncidentStatus.ANALYZING.value,
-                new_status=IncidentStatus.ERROR.value,
-                reason=f"Evidence processing error: {exc}",
-            )
-            return
-
-        # Lógica de incertidumbre y notificación
-        if incident.ai_category in ["incierto", "uncertain"] or incident.ai_confidence < 0.6:
-            prev_status = incident.status
-            incident.status = IncidentStatus.PENDING_INFO
-            incident_repository.save_incident(db, incident)
-            status_history_repository.log_status_change(
-                db,
-                incident_id=incident_id,
-                previous_status=prev_status.value if prev_status else None,
-                new_status=IncidentStatus.PENDING_INFO.value,
-                reason="Incertidumbre en IA, requiere más información",
-            )
-            # Notificar al cliente
-            from app.module_incidents.services.notification_service import NotificationService
-            notifier = NotificationService(db)
-            asyncio.run(notifier.notify_client_needs_more_info(incident))
-        else:
-            asyncio.run(assignment_service.find_and_create_offer(db, incident))
+        finally:
+            db.close()
 
     except Exception as exc:
         logger.error(f"Background AI task failed for incident {incident_id}: {exc}")
@@ -268,6 +249,11 @@ def request_help(
         reason="AI processing started",
     )
 
+    # [CONECTADO] Notificar al cliente que la solicitud fue recibida
+    from app.module_incidents.services.notification_service import NotificationService
+    notifier = NotificationService(db)
+    background_tasks.add_task(notifier.notify_client_incident_created, current_user.id, incident)
+
     background_tasks.add_task(_process_incident_with_ai, incident.id)
 
     return IncidentResponseDto(
@@ -298,8 +284,11 @@ def get_incident(
     evidence_urls = []
     
     for ev in evidences:
-        if ev.evidence_type.value.lower() == "image":
-            evidence_urls.append(storage_service.generate_signed_url(ev.file_url))
+        if ev.evidence_type.value.lower() in ["image", "audio"]:
+            evidence_urls.append({
+                "url": storage_service.generate_signed_url(ev.file_url),
+                "type": ev.evidence_type.value.lower()
+            })
         if ev.ai_analysis and "vertex" in ev.ai_analysis:
             vertex_analysis = ev.ai_analysis["vertex"]
             
@@ -314,6 +303,7 @@ def get_incident(
         "latitude": incident.incident_lat,
         "longitude": incident.incident_lng,
         "estimated_arrival_min": incident.estimated_arrival_min,
+        "total_cost": incident.total_cost,
         "created_at": incident.created_at,
         "updated_at": incident.updated_at,
         "vertex_analysis": vertex_analysis,
@@ -346,12 +336,46 @@ async def upload_evidence(file: UploadFile = File(...)):
             detail=f"Tipo de archivo no permitido: {file.content_type}",
         )
 
+    # [NUEVO] Log para depurar qué está leyendo el sistema
+    logger.info(f"Intentando subida. Bucket configurado: '{storage_service.GCS_BUCKET_NAME}'")
+
+    if storage_service.GCS_BUCKET_NAME:
+        try:
+            if file.content_type.startswith("audio/"):
+                logger.info(f"Subiendo audio a GCS: {file.filename}")
+                result = storage_service.upload_audio_file(file)
+                return JSONResponse(
+                    status_code=201,
+                    content={"file_url": result.file_url, "evidence_type": "audio"}
+                )
+            elif file.content_type.startswith("image/"):
+                logger.info(f"Subiendo imagen a GCS: {file.filename}")
+                file_url = storage_service.upload_image_file(file)
+                return JSONResponse(
+                    status_code=201,
+                    content={"file_url": file_url, "evidence_type": "image"}
+                )
+        except Exception as e:
+            logger.error(f"❌ FALLÓ GCS: {str(e)} - Reintentando local...")
+
+    # Fallback local (anterior) si no hay GCS o falla
     ext = (file.filename or "file").rsplit(".", 1)[-1].lower()
     filename = f"{uuid.uuid4()}.{ext}"
     dest = os.path.join(_UPLOADS_DIR, filename)
 
     os.makedirs(_UPLOADS_DIR, exist_ok=True)
     contents = await file.read()
+    
+    # [NUEVO] Refinamiento básico local para imágenes si es posible
+    if file.content_type.startswith("image/"):
+        try:
+            enhanced, _ = storage_service.enhance_image(contents)
+            contents = enhanced
+            filename = filename.rsplit(".", 1)[0] + ".jpg"
+            dest = os.path.join(_UPLOADS_DIR, filename)
+        except Exception as e:
+            logger.warning(f"Local image enhancement failed: {e}")
+
     with open(dest, "wb") as f:
         f.write(contents)
 

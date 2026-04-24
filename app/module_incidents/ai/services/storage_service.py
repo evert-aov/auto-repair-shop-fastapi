@@ -3,8 +3,10 @@ import shutil
 import subprocess
 import tempfile
 import uuid
+import io
 from dataclasses import dataclass
 from pathlib import Path
+from PIL import Image, ImageEnhance, ImageOps
 
 from fastapi import UploadFile
 from google.cloud import storage
@@ -68,6 +70,29 @@ def _convert_to_flac(content: bytes, filename: str | None) -> bytes:
         return output_path.read_bytes()
 
 
+def enhance_image(image_bytes: bytes) -> tuple[bytes, dict]:
+    with Image.open(io.BytesIO(image_bytes)) as img:
+        img = ImageOps.exif_transpose(img).convert("RGB")
+        original_size = img.size
+
+        max_side = 1600
+        img.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+        img = ImageEnhance.Contrast(img).enhance(1.12)
+        img = ImageEnhance.Sharpness(img).enhance(1.08)
+
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=88, optimize=True)
+        enhanced_bytes = out.getvalue()
+
+    preprocessing = {
+        "original_size": {"width": original_size[0], "height": original_size[1]},
+        "enhanced_size": {"width": img.size[0], "height": img.size[1]},
+        "output_format": "image/jpeg",
+    }
+    return enhanced_bytes, preprocessing
+
+
+
 def upload_audio_file(file: UploadFile) -> UploadAudioResult:
     if not GCS_BUCKET_NAME:
         raise ValueError("GCS_BUCKET_NAME is not configured")
@@ -94,16 +119,18 @@ def upload_image_file(file: UploadFile) -> str:
     if not GCS_BUCKET_NAME:
         raise ValueError("GCS_BUCKET_NAME is not configured")
 
-    content = file.file.read()
-    extension = Path(file.filename or "image.jpg").suffix or ".jpg"
-    object_name = f"{GCS_VISION_PREFIX}/{uuid.uuid4()}{extension}"
+    original_content = file.file.read()
+    
+    # Refinamiento de imagen antes de subir
+    enhanced_content, _ = enhance_image(original_content)
+
+    object_name = f"{GCS_VISION_PREFIX}/{uuid.uuid4()}.jpg"
 
     client = get_storage_client()
     bucket = client.bucket(GCS_BUCKET_NAME)
 
-
     blob = bucket.blob(object_name)
-    blob.upload_from_string(content, content_type=file.content_type or "image/jpeg")
+    blob.upload_from_string(enhanced_content, content_type="image/jpeg")
 
     return f"gs://{GCS_BUCKET_NAME}/{object_name}"
 

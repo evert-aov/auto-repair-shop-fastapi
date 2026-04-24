@@ -33,6 +33,18 @@ def list_technicians(
     workshop_id = service.get_owner_workshop_id(current_user.id)
     return service.get_all_by_workshop(workshop_id)
 
+
+@router.get("/available", response_model=List[TechnicianResponse], status_code=status.HTTP_200_OK)
+def list_available_technicians(
+    db: Session = Depends(get_db),
+    current_user=_owner_only,
+):
+    """Owner only: List only AVAILABLE technicians (is_available=True) from their workshop."""
+    service = TechnicianService(db)
+    workshop_id = service.get_owner_workshop_id(current_user.id)
+    all_techs = service.get_all_by_workshop(workshop_id)
+    return [t for t in all_techs if t.is_available]
+
 @router.get("/{technician_id}", response_model=TechnicianResponse, status_code=status.HTTP_200_OK)
 def get_technician(
     technician_id: uuid.UUID,
