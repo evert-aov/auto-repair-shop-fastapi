@@ -19,6 +19,10 @@ class IncidentCreateDto(BaseModel):
     evidences: List[EvidenceDto] = []
 
 
+class IncidentEvidenceAddDto(BaseModel):
+    evidences: List[EvidenceDto]
+
+
 class IncidentResponseDto(BaseModel):
     id: UUID
     status: str
@@ -26,9 +30,11 @@ class IncidentResponseDto(BaseModel):
     ai_priority: Optional[str] = None
     ai_confidence: Optional[float] = None
     ai_summary: Optional[str] = None
+    vertex_analysis: Optional[dict] = None
     estimated_arrival_min: Optional[int] = None
     created_at: datetime
     message: str
+    evidence_urls: List[str] = []
 
     class Config:
         from_attributes = True

@@ -108,6 +108,7 @@ class Incident(Base):
     )
     ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    vertex_analysis: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     assigned_workshop_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workshops.id", ondelete="SET NULL"), nullable=True
     )
@@ -115,6 +116,7 @@ class Incident(Base):
         UUID(as_uuid=True), ForeignKey("technicians.id", ondelete="SET NULL"), nullable=True
     )
     estimated_arrival_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

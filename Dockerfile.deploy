@@ -1,0 +1,28 @@
+FROM python:3.10-slim
+
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+ENV PORT 8000
+
+WORKDIR /app
+
+# Instalar dependencias del sistema necesarias
+# libpq-dev para PostgreSQL
+# ffmpeg para procesamiento de audio (IA)
+# gcc para compilar algunas dependencias de python si es necesario
+RUN apt-get update && apt-get install -y \
+    libpq-dev \
+    gcc \
+    curl \  
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Comando de inicio:
+# 1. Ejecutar migraciones de base de datos
+# 2. Iniciar uvicorn usando la variable de entorno $PORT (requerido por Cloud Run)
+CMD ["sh", "-c", "alembic upgrade head && python3 -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]

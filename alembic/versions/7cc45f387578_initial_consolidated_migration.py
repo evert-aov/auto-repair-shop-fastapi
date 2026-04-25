@@ -1,8 +1,8 @@
-"""initial_migration
+"""Initial consolidated migration
 
-Revision ID: a9c818d49532
+Revision ID: 7cc45f387578
 Revises: 
-Create Date: 2026-04-18 10:24:59.890027
+Create Date: 2026-04-20 10:27:33.734790
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'a9c818d49532'
+revision: str = '7cc45f387578'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -100,6 +100,7 @@ def upgrade() -> None:
     sa.Column('rejection_count', sa.Integer(), server_default=sa.text('0'), nullable=False),
     sa.Column('last_rejection_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('rejection_rate', sa.Float(), server_default=sa.text('0.0'), nullable=False),
+    sa.Column('activity_points', sa.Integer(), server_default=sa.text('50'), nullable=False),
     sa.Column('is_active', sa.Boolean(), server_default=sa.text('TRUE'), nullable=False),
     sa.Column('is_available', sa.Boolean(), server_default=sa.text('TRUE'), nullable=False),
     sa.Column('is_verified', sa.Boolean(), server_default=sa.text('FALSE'), nullable=False),
@@ -173,7 +174,7 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('incident_id', sa.UUID(), nullable=False),
     sa.Column('evidence_type', sa.Enum('IMAGE', 'AUDIO', 'TEXT', name='evidence_type_enum'), nullable=False),
-    sa.Column('file_url', sa.String(length=500), nullable=False),
+    sa.Column('file_url', sa.Text(), nullable=False),
     sa.Column('transcription', sa.Text(), nullable=True),
     sa.Column('ai_analysis', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.ForeignKeyConstraint(['incident_id'], ['incidents.id'], ondelete='CASCADE'),
@@ -242,9 +243,14 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('incident_id', sa.UUID(), nullable=False),
     sa.Column('workshop_id', sa.UUID(), nullable=False),
-    sa.Column('status', sa.Enum('NOTIFIED', 'ACCEPTED', 'REJECTED', 'EXPIRED', name='offer_status_enum'), nullable=False),
+    sa.Column('status', sa.Enum('NOTIFIED', 'ACCEPTED', 'REJECTED', 'TIMEOUT', 'EXPIRED', name='offer_status_enum'), nullable=False),
     sa.Column('distance_km', sa.Float(), nullable=True),
     sa.Column('ai_score', sa.Float(), nullable=True),
+    sa.Column('notified_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('accepted_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('rejected_at', sa.DateTime(timezone=True), nullable=True),
+    sa.Column('rejection_reason', sa.String(length=50), nullable=True),
+    sa.Column('timeout_minutes', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('expires_at', sa.DateTime(timezone=True), nullable=True),
     sa.ForeignKeyConstraint(['incident_id'], ['incidents.id'], ondelete='CASCADE'),

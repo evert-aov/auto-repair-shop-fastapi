@@ -29,17 +29,43 @@ logger = logging.getLogger(__name__)
 
 class FCMService:
     """
-    Wrapper para Firebase Cloud Messaging
-    En producción, inicializar con credenciales de Firebase Admin SDK
+    Wrapper para Firebase Cloud Messaging usando firebase-admin SDK.
+    Se inicializa automáticamente si FIREBASE_SERVICE_ACCOUNT_KEY está en el .env.
     """
+    _initialized = False
 
     def __init__(self):
-        # TODO: Inicializar Firebase Admin SDK
-        # import firebase_admin
-        # from firebase_admin import credentials, messaging
-        # cred = credentials.Certificate("path/to/serviceAccountKey.json")
-        # firebase_admin.initialize_app(cred)
-        pass
+        if not FCMService._initialized:
+            import os
+            import firebase_admin
+            from firebase_admin import credentials
+
+            # Si ya hay una app inicializada, no hacemos nada
+            if firebase_admin._apps:
+                FCMService._initialized = True
+                return
+
+            # Estrategia 1: Application Default Credentials (Recomendado para Cloud Run)
+            try:
+                firebase_admin.initialize_app()
+                FCMService._initialized = True
+                logger.info("✅ Firebase Admin SDK inicializado vía ADC (Cloud Run)")
+                return
+            except Exception as e:
+                logger.debug(f"ADC no disponible ({e}), intentando vía archivo de credenciales...")
+
+            # Estrategia 2: Archivo de credenciales (Fallback para Local)
+            key_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
+            if key_path and os.path.exists(key_path):
+                try:
+                    cred = credentials.Certificate(key_path)
+                    firebase_admin.initialize_app(cred)
+                    FCMService._initialized = True
+                    logger.info(f"✅ Firebase Admin SDK inicializado vía archivo: {key_path}")
+                except Exception as e:
+                    logger.error(f"❌ Error al inicializar Firebase con archivo: {e}")
+            else:
+                logger.warning("⚠️ No se encontró FIREBASE_SERVICE_ACCOUNT_KEY ni ADC. Notificaciones deshabilitadas.")
 
     async def send_to_user(
             self,
@@ -47,48 +73,63 @@ class FCMService:
             title: str,
             body: str,
             data: dict = None,
-            priority: str = "normal"
+            priority: str = "normal",
+            db=None,
     ) -> bool:
         """
-        Enviar notificación push a un usuario específico
-
-        Args:
-            user_id: UUID del usuario
-            title: Título de la notificación
-            body: Cuerpo del mensaje
-            data: Data payload adicional
-            priority: "normal" | "high"
-
-        Returns:
-            True si se envió correctamente
+        Envía notificación push real via FCM al dispositivo del usuario.
+        Busca el fcm_token en la BD. Si no tiene token, solo guarda en BD.
         """
-
         try:
-            # TODO: Implementar envío real con FCM
-            # 1. Obtener FCM tokens del usuario desde BD
-            # 2. Enviar mensaje usando firebase_admin.messaging.send_multicast
+            # Obtener FCM token del usuario desde BD
+            fcm_token = None
+            if db is not None:
+                from app.module_users.models.models import User
+                user = db.query(User).filter(User.id == user_id).first()
+                if user:
+                    fcm_token = user.fcm_token
 
-            logger.info(
-                f"[FCM] Enviando a user {user_id}: {title} - {body}"
+            if not fcm_token:
+                logger.info(f"[FCM] User {user_id} no tiene token FCM registrado — solo guardado en BD")
+                return True  # No es un error, simplemente no hay dispositivo registrado
+
+            if not FCMService._initialized:
+                logger.warning(f"[FCM] SDK no inicializado — simulando envío a user {user_id}: {title}")
+                return True
+
+            # Envío real con Firebase Admin SDK
+            import firebase_admin
+            from firebase_admin import messaging
+
+            str_data = {k: str(v) for k, v in (data or {}).items()}
+
+            message = messaging.Message(
+                notification=messaging.Notification(title=title, body=body),
+                data=str_data,
+                token=fcm_token,
+                android=messaging.AndroidConfig(
+                    priority="high" if priority == "high" else "normal",
+                    notification=messaging.AndroidNotification(
+                        icon="ic_notification",
+                        color="#6366F1",
+                    ),
+                ),
+                apns=messaging.APNSConfig(
+                    payload=messaging.APNSPayload(
+                        aps=messaging.Aps(
+                            alert=messaging.ApsAlert(title=title, body=body),
+                            sound="default",
+                        )
+                    )
+                ),
             )
 
-            # Simulación (en producción reemplazar con código real)
-            # from firebase_admin import messaging
-            # tokens = get_user_fcm_tokens(user_id)
-            # message = messaging.MulticastMessage(
-            #     notification=messaging.Notification(title=title, body=body),
-            #     data=data or {},
-            #     tokens=tokens,
-            #     android=messaging.AndroidConfig(priority=priority),
-            #     apns=messaging.APNSConfig(...)
-            # )
-            # response = messaging.send_multicast(message)
-            # return response.success_count > 0
-
+            response = messaging.send(message)
+            logger.info(f"✅ [FCM] Push enviado a user {user_id}: {title} → message_id={response}")
             return True
 
         except Exception as e:
-            logger.error(f"Error enviando FCM a user {user_id}: {e}")
+            logger.error(f"❌ [FCM] Error enviando push a user {user_id}: {e}")
             return False
 
 
@@ -146,7 +187,8 @@ class NotificationService:
             title=title,
             body=body,
             data=data,
-            priority=priority
+            priority=priority,
+            db=self.db,
         )
 
         if success:

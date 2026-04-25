@@ -67,10 +67,18 @@ async def shutdown_event():
     logger.info("App apagada, scheduler detenido")
 
 # Configurar CORS
+origins_raw = os.getenv("ALLOWED_ORIGINS", "")
+if origins_raw:
+    allowed_origins = [origin.strip() for origin in origins_raw.split(",")]
+    allow_all_origins = False
+else:
+    allowed_origins = ["*"]
+    allow_all_origins = True
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción, usa una lista de dominios específicos
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials=not allow_all_origins, # No se puede usar credentials con "*"
     allow_methods=["*"],
     allow_headers=["*"],
 )
