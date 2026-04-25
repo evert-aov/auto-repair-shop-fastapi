@@ -37,32 +37,35 @@ class FCMService:
     def __init__(self):
         if not FCMService._initialized:
             import os
+            import firebase_admin
+            from firebase_admin import credentials
+
+            # Si ya hay una app inicializada, no hacemos nada
+            if firebase_admin._apps:
+                FCMService._initialized = True
+                return
+
+            # Estrategia 1: Application Default Credentials (Recomendado para Cloud Run)
+            try:
+                firebase_admin.initialize_app()
+                FCMService._initialized = True
+                logger.info("✅ Firebase Admin SDK inicializado vía ADC (Cloud Run)")
+                return
+            except Exception as e:
+                logger.debug(f"ADC no disponible ({e}), intentando vía archivo de credenciales...")
+
+            # Estrategia 2: Archivo de credenciales (Fallback para Local)
             key_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
             if key_path and os.path.exists(key_path):
                 try:
-                    import firebase_admin
-                    from firebase_admin import credentials
-                    if not firebase_admin._apps:
-                        cred = credentials.Certificate(key_path)
-                        firebase_admin.initialize_app(cred)
-                        FCMService._initialized = True
-                        logger.info(f"✅ Firebase Admin SDK inicializado usando archivo: {key_path}")
-                    else:
-                        FCMService._initialized = True
+                    cred = credentials.Certificate(key_path)
+                    firebase_admin.initialize_app(cred)
+                    FCMService._initialized = True
+                    logger.info(f"✅ Firebase Admin SDK inicializado vía archivo: {key_path}")
                 except Exception as e:
-                    logger.error(f"❌ Error inicializando Firebase con archivo {key_path}: {e}")
+                    logger.error(f"❌ Error al inicializar Firebase con archivo: {e}")
             else:
-                # Intento de inicialización con credenciales por defecto (Cloud Run Service Account)
-                try:
-                    import firebase_admin
-                    if not firebase_admin._apps:
-                        firebase_admin.initialize_app()
-                        FCMService._initialized = True
-                        logger.info("✅ Firebase Admin SDK inicializado usando Application Default Credentials (ADC)")
-                    else:
-                        FCMService._initialized = True
-                except Exception as e:
-                    logger.warning(f"⚠️ No se pudo inicializar Firebase vía ADC ni archivo: {e}. Notificaciones push deshabilitadas.")
+                logger.warning("⚠️ No se encontró FIREBASE_SERVICE_ACCOUNT_KEY ni ADC. Notificaciones deshabilitadas.")
 
     async def send_to_user(
             self,
