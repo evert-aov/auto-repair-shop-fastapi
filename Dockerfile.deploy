@@ -18,4 +18,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Comando de inicio mejorado
-CMD ["sh", "-c", "alembic upgrade head || echo 'Migration failed'; python3 -m app.seed || echo 'Seed failed'; exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --timeout-keep-alive 5 --proxy-headers --forwarded-allow-ips='*'"]
+CMD ["sh", "-c", "alembic upgrade head || { echo '⚠️ Migration failed, trying to stamp head...'; alembic stamp head; }; python3 -m app.seed || echo '⚠️ Seed failed'; exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080} --proxy-headers --forwarded-allow-ips='*' --timeout-keep-alive 5"]
