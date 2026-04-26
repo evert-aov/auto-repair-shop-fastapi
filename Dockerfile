@@ -46,7 +46,7 @@ RUN chmod +x /app/entrypoint.sh
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-EXPOSE 8000
+EXPOSE 8080
 
 # Run entrypoint script
 ENTRYPOINT ["/app/entrypoint.sh"]

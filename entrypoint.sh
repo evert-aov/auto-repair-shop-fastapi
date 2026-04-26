@@ -30,6 +30,6 @@ alembic upgrade head || echo "⚠️ Alembic upgrade failed, continuing..."
 echo "Running seed..."
 python3 -m app.seed || echo "⚠️ Seed failed, continuing..."
 
-echo "Starting FastAPI application on port ${PORT:-8000}..."
-exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --proxy-headers --forwarded-allow-ips='*'
+echo "Starting FastAPI application on port ${PORT:-8080}..."
+exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8080}" --proxy-headers --forwarded-allow-ips='*'
 
