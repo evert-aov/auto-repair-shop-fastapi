@@ -59,3 +59,5 @@ google-cloud-speech
 google-cloud-storage
 google-cloud-firestore
 firebase-admin
+google-cloud-aiplatform
+Pillow
