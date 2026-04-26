@@ -1,10 +1,14 @@
+import logging
 import uuid
+from datetime import datetime, timezone
 from typing import List
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 from app.module_workshops.repositories.workshop_repository import WorkshopRepository
 from app.module_workshops.models.models import Workshop, Technician
+
+logger = logging.getLogger(__name__)
 from app.module_workshops.dtos.workshop_dto import WorkshopUpdate, WorkshopAdminUpdate, WorkshopRegisterPublic
 from app.module_workshops.repositories.technician_repository import TechnicianRepository
 from app.module_users.repositories import user_repository, role_repository
@@ -174,6 +178,39 @@ class WorkshopService:
             workshop.specialties = specialties
             
         return self.repository.update(workshop)
+
+    def clear_cooldown(self, workshop_id: uuid.UUID) -> dict:
+        """Admin: cancela el cooldown activo del taller anulando el rejected_at de las offers vigentes."""
+        from app.module_incidents.models import WorkshopOffer, OfferStatus
+        from app.module_incidents.services.assignment_service import _COOLDOWN_DURATIONS
+
+        workshop = self.get_by_id(workshop_id)
+
+        rejected_offers = (
+            self.db.query(WorkshopOffer)
+            .filter(
+                WorkshopOffer.workshop_id == workshop_id,
+                WorkshopOffer.status.in_([OfferStatus.REJECTED, OfferStatus.TIMEOUT]),
+                WorkshopOffer.rejected_at.isnot(None),
+            )
+            .all()
+        )
+
+        now = datetime.now(timezone.utc)
+        cleared = 0
+        for offer in rejected_offers:
+            reason = offer.rejection_reason or "no_reason"
+            duration = _COOLDOWN_DURATIONS.get(reason, __import__("datetime").timedelta(hours=1))
+            if now < offer.rejected_at + duration:
+                offer.rejected_at = None
+                cleared += 1
+
+        self.db.commit()
+        logger.info(
+            f"[ADMIN] Cooldown limpiado para taller '{workshop.name}' ({workshop_id}) — "
+            f"{cleared} offer(s) afectadas"
+        )
+        return {"workshop_id": str(workshop_id), "workshop_name": workshop.name, "offers_cleared": cleared}
 
     def delete(self, workshop_id: uuid.UUID) -> None:
         workshop = self.get_by_id(workshop_id)

@@ -31,6 +31,7 @@ class PaymentMethod(str, enum.Enum):
     CARD = "card"
     CASH = "cash"
     TRANSFER = "transfer"
+    PAYPAL = "paypal"
 
 
 class PaymentStatus(str, enum.Enum):

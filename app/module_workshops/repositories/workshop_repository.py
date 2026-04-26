@@ -39,6 +39,7 @@ def find_nearby_workshops(
             WorkshopSpecialty.specialty_id == specialty_id,
             Workshop.rating_avg >= min_rating,
             Workshop.is_active.is_(True),
+            Workshop.is_verified.is_(True),
         )
         .all()
     )

@@ -90,7 +90,26 @@ def _is_in_cooldown(db: Session, workshop_id: uuid.UUID) -> bool:
     reason = last_rejection.rejection_reason or "no_reason"
     duration = _COOLDOWN_DURATIONS.get(reason, timedelta(hours=1))
     expires_at = last_rejection.rejected_at + duration
-    return datetime.now(timezone.utc) < expires_at
+
+    if datetime.now(timezone.utc) >= expires_at:
+        return False
+
+    # Si el taller aceptó exitosamente una oferta DESPUÉS del último rechazo,
+    # el cooldown se cancela (el taller demostró disponibilidad)
+    last_accepted = (
+        db.query(WorkshopOffer)
+        .filter(
+            WorkshopOffer.workshop_id == workshop_id,
+            WorkshopOffer.status == OfferStatus.ACCEPTED,
+            WorkshopOffer.accepted_at.isnot(None),
+            WorkshopOffer.accepted_at > last_rejection.rejected_at,
+        )
+        .first()
+    )
+    if last_accepted:
+        return False
+
+    return True
 
 
 async def find_and_create_offer(db: Session, incident: Incident) -> WorkshopOffer | None:
@@ -167,8 +186,8 @@ async def find_and_create_offer(db: Session, incident: Incident) -> WorkshopOffe
         distance_km=winner_distance,
         ai_score=winner_score,
         notified_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
-        timeout_minutes=30,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=3),
+        timeout_minutes=3,
     )
     offer_repository.save_offer(db, offer)
 
@@ -177,9 +196,8 @@ async def find_and_create_offer(db: Session, incident: Incident) -> WorkshopOffe
     incident_repository.save_incident(db, incident)
 
     logger.info(
-        f"[YANGO N=1] Offer → workshop={winner_workshop.id} "
-        f"score={winner_score} dist={winner_distance:.1f}km "
-        f"activity_pts={winner_workshop.activity_points}"
+        f"[ASIGNACIÓN] Incidente {incident.id} → Taller '{winner_workshop.name}' (id={winner_workshop.id}) | "
+        f"distancia={winner_distance:.1f}km score={winner_score:.3f} puntos_actividad={winner_workshop.activity_points}"
     )
 
     notification_service = NotificationService(db)

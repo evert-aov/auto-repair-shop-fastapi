@@ -91,7 +91,7 @@ def _process_incident_with_ai(incident_id: uuid.UUID) -> None:
             if incident.vehicle_id:
                 v = db.query(Vehicle).filter(Vehicle.id == incident.vehicle_id).first()
                 if v:
-                    vehicle_info = f"{v.brand} {v.model} ({v.year})"
+                    vehicle_info = f"{v.make} {v.model} ({v.year})"
 
             # Extraer el audio transcript por separado (si existe)
             audio_transcript = next((ev.transcription for ev in evidence_list if ev.evidence_type.value == "audio" and ev.transcription), None)
@@ -118,7 +118,7 @@ def _process_incident_with_ai(incident_id: uuid.UUID) -> None:
 
             # Estimación Grounded
             tecnico_info = triage_result.get("tecnico", {})
-            diagnostic = tecnico_info.get("diagnostico_tecnico", full_description)
+            diagnostic = tecnico_info.get("diagnostico_tecnico", incident.description)
             estimation = vertex_service.estimate_cost_grounded(diagnostic, incident.ai_category)
             
             if estimation and "costo_estimado" in estimation:
@@ -519,3 +519,37 @@ def get_transcription_job_status(job_id: str):
         converted_to_flac=job["converted_to_flac"],
         stored_content_type=job["stored_content_type"],
     )
+
+
+@router.get(
+    "/pending",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_role("workshop_owner"))],
+)
+def get_pending_incidents(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get all pending incidents available for workshop offers.
+    Returns incidents with status 'pending' or 'matched'.
+    Only accessible to workshop_owner users.
+    """
+    incidents = incident_repository.get_pending_incidents(db)
+
+    return [
+        {
+            "id": str(incident.id),
+            "status": incident.status.value,
+            "description": incident.description,
+            "ai_category": incident.ai_category,
+            "ai_priority": incident.ai_priority.value if incident.ai_priority else None,
+            "ai_confidence": incident.ai_confidence,
+            "latitude": incident.incident_lat,
+            "longitude": incident.incident_lng,
+            "estimated_arrival_min": incident.estimated_arrival_min,
+            "created_at": incident.created_at.isoformat(),
+            "updated_at": incident.updated_at.isoformat() if incident.updated_at else None,
+        }
+        for incident in incidents
+    ]

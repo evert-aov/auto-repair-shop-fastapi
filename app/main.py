@@ -21,6 +21,7 @@ from app.security.controller.client_controller import router as client_route
 from app.module_users.controller.vehicle_controller import router as vehicle_route
 from app.module_incidents.controller.incident_controller import router as incidents_router
 from app.module_incidents.controller.offer_controller import router as offers_router
+from app.module_payments.controller.payment_controller import router as payments_router
 from app.module_workshops.controller.workshop_controller import router as workshop_router
 from app.module_workshops.controller.technician_controller import router as technician_router
 from app.module_workshops.controller.specialty_controller import router as specialty_router
@@ -92,6 +93,7 @@ app.include_router(client_route)
 app.include_router(vehicle_route)
 app.include_router(incidents_router)
 app.include_router(offers_router)
+app.include_router(payments_router)
 app.include_router(workshop_router)
 app.include_router(technician_router)
 app.include_router(specialty_router)

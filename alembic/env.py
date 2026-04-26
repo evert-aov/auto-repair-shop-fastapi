@@ -28,6 +28,7 @@ import app.module_users.models  # noqa: F401
 import app.security.models  # noqa: F401
 import app.module_workshops.models  # noqa: F401
 import app.module_incidents.models  # noqa: F401
+import app.module_reports.models.report_template  # noqa: F401
 
 target_metadata = Base.metadata
 

@@ -69,6 +69,16 @@ def admin_update_workshop(
     service = WorkshopService(db)
     return service.update_admin(workshop_id, dto)
 
+@router.post("/{workshop_id}/clear-cooldown", status_code=status.HTTP_200_OK)
+def clear_workshop_cooldown(
+    workshop_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=_admin_only,
+):
+    """Admin only: Remove active cooldown from a workshop."""
+    service = WorkshopService(db)
+    return service.clear_cooldown(workshop_id)
+
 @router.delete("/{workshop_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_workshop(
     workshop_id: uuid.UUID,

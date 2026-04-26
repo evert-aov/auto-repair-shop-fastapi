@@ -33,6 +33,10 @@ class AdminStats(BaseModel):
     monthly_growth: list[dict[str, Any]]
     pending_workshops: list[dict[str, Any]]
     cancelled_services: list[dict[str, Any]]
+    revenue_trend_pct: float
+    profit_trend_pct: float
+    users_trend_pct: float
+    ai_trend_pct: float
 
 
 class WorkshopStats(BaseModel):
@@ -54,6 +58,19 @@ class ClientStats(BaseModel):
     spending_by_vehicle: list[dict[str, Any]]
     spending_by_category: list[dict[str, Any]]
     service_history: list[dict[str, Any]]
+
+
+class TechnicianStats(BaseModel):
+    assigned_count: int
+    in_progress_count: int
+    completed_today: int
+    completed_total: int
+    avg_rating: float
+    productivity: float
+    is_available: bool
+    workshop_name: str
+    active_incidents: list[dict[str, Any]]
+    recent_completed: list[dict[str, Any]]
 
 
 # ─── Admin Dashboard ──────────────────────────────────────────────────────────
@@ -123,6 +140,50 @@ def admin_dashboard(
         for w in pending_ws
     ]
 
+    # Month-over-month trends
+    now_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    last_month_end = now_month_start
+    last_month_start = (now_month_start - timedelta(days=1)).replace(day=1)
+
+    def _pct_change(curr: float, prev: float) -> float:
+        if prev == 0:
+            return 100.0 if curr > 0 else 0.0
+        return round((curr - prev) / prev * 100, 1)
+
+    def _month_revenue(start, end) -> float:
+        row = db.query(func.coalesce(func.sum(Payment.gross_amount), 0.0)).filter(
+            Payment.status == PaymentStatus.COMPLETED,
+            Payment.created_at >= start, Payment.created_at < end,
+        ).first()
+        return float(row[0])
+
+    def _month_profit(start, end) -> float:
+        row = db.query(func.coalesce(func.sum(Payment.commission_amount), 0.0)).filter(
+            Payment.status == PaymentStatus.COMPLETED,
+            Payment.created_at >= start, Payment.created_at < end,
+        ).first()
+        return float(row[0])
+
+    def _month_users(start, end) -> int:
+        return db.query(func.count(User.id)).filter(
+            User.created_at >= start, User.created_at < end,
+        ).scalar() or 0
+
+    def _month_ai_rate(start, end) -> float:
+        ana = db.query(func.count(Incident.id)).filter(
+            Incident.ai_category.isnot(None), Incident.created_at >= start, Incident.created_at < end,
+        ).scalar() or 0
+        conf = db.query(func.count(Incident.id)).filter(
+            Incident.ai_category.isnot(None), Incident.ai_confidence >= 0.7,
+            Incident.created_at >= start, Incident.created_at < end,
+        ).scalar() or 0
+        return round((conf / ana * 100) if ana > 0 else 0.0, 1)
+
+    revenue_trend_pct = _pct_change(_month_revenue(now_month_start, now), _month_revenue(last_month_start, last_month_end))
+    profit_trend_pct = _pct_change(_month_profit(now_month_start, now), _month_profit(last_month_start, last_month_end))
+    users_trend_pct = _pct_change(_month_users(now_month_start, now), _month_users(last_month_start, last_month_end))
+    ai_trend_pct = round(_month_ai_rate(now_month_start, now) - _month_ai_rate(last_month_start, last_month_end), 1)
+
     # Cancelled services audit
     cancelled_rows = (
         db.query(Incident)
@@ -151,6 +212,10 @@ def admin_dashboard(
         monthly_growth=monthly_growth,
         pending_workshops=pending_workshops,
         cancelled_services=cancelled_services,
+        revenue_trend_pct=revenue_trend_pct,
+        profit_trend_pct=profit_trend_pct,
+        users_trend_pct=users_trend_pct,
+        ai_trend_pct=ai_trend_pct,
     )
 
 
@@ -272,6 +337,116 @@ def workshop_dashboard(
         daily_revenue=daily_revenue,
         emergency_inbox=emergency_inbox,
         technician_locations=technician_locations,
+    )
+
+
+# ─── Technician Dashboard ────────────────────────────────────────────────────
+
+@router.get("/technician", response_model=TechnicianStats)
+def technician_dashboard(
+    db: Session = Depends(get_db),
+    current_user=Depends(require_role("technician")),
+) -> TechnicianStats:
+    tid = current_user.id
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = today_start + timedelta(days=1)
+
+    # Technician profile
+    tech = db.query(Technician).filter(Technician.id == tid).first()
+    if not tech:
+        raise HTTPException(status_code=404, detail="Técnico no encontrado")
+
+    workshop_name = _get_workshop_name(db, tech.workshop_id)
+
+    # Incident counters
+    assigned_count = db.query(func.count(Incident.id)).filter(
+        Incident.assigned_technician_id == tid,
+        Incident.status == IncidentStatus.ASSIGNED,
+    ).scalar() or 0
+
+    in_progress_count = db.query(func.count(Incident.id)).filter(
+        Incident.assigned_technician_id == tid,
+        Incident.status == IncidentStatus.IN_PROGRESS,
+    ).scalar() or 0
+
+    completed_today = db.query(func.count(Incident.id)).filter(
+        Incident.assigned_technician_id == tid,
+        Incident.status == IncidentStatus.COMPLETED,
+        Incident.updated_at >= today_start,
+        Incident.updated_at < today_end,
+    ).scalar() or 0
+
+    completed_total = db.query(func.count(Incident.id)).filter(
+        Incident.assigned_technician_id == tid,
+        Incident.status == IncidentStatus.COMPLETED,
+    ).scalar() or 0
+
+    cancelled_total = db.query(func.count(Incident.id)).filter(
+        Incident.assigned_technician_id == tid,
+        Incident.status == IncidentStatus.CANCELLED,
+    ).scalar() or 0
+
+    total_closed = completed_total + cancelled_total
+    productivity = round((completed_total / total_closed * 100) if total_closed > 0 else 0.0, 1)
+
+    # Average rating from completed incidents
+    rating_row = db.query(func.coalesce(func.avg(Rating.score), 0.0)).join(
+        Incident, Rating.incident_id == Incident.id
+    ).filter(Incident.assigned_technician_id == tid).scalar()
+    avg_rating = round(float(rating_row), 2)
+
+    # Active incidents (ASSIGNED + IN_PROGRESS)
+    active_rows = db.query(Incident).filter(
+        Incident.assigned_technician_id == tid,
+        Incident.status.in_([IncidentStatus.ASSIGNED, IncidentStatus.IN_PROGRESS]),
+    ).order_by(Incident.created_at.asc()).limit(10).all()
+    active_incidents = [
+        {
+            "id": str(inc.id),
+            "client_name": _get_client_name(db, inc.client_id),
+            "ai_category": inc.ai_category,
+            "ai_priority": inc.ai_priority.value if inc.ai_priority else None,
+            "status": inc.status.value,
+            "incident_lat": float(inc.incident_lat) if inc.incident_lat else None,
+            "incident_lng": float(inc.incident_lng) if inc.incident_lng else None,
+            "created_at": inc.created_at.isoformat(),
+        }
+        for inc in active_rows
+    ]
+
+    # Recent completed (last 5)
+    recent_rows = db.query(Incident).filter(
+        Incident.assigned_technician_id == tid,
+        Incident.status == IncidentStatus.COMPLETED,
+    ).order_by(Incident.updated_at.desc()).limit(5).all()
+    recent_completed = []
+    for inc in recent_rows:
+        amount = float(
+            db.query(func.coalesce(func.sum(Payment.gross_amount), 0.0))
+            .filter(Payment.incident_id == inc.id).scalar() or 0.0
+        )
+        rating = db.query(Rating).filter(Rating.incident_id == inc.id).first()
+        recent_completed.append({
+            "id": str(inc.id),
+            "client_name": _get_client_name(db, inc.client_id),
+            "ai_category": inc.ai_category,
+            "amount": amount,
+            "rating_score": rating.score if rating else None,
+            "completed_at": inc.updated_at.isoformat(),
+        })
+
+    return TechnicianStats(
+        assigned_count=assigned_count,
+        in_progress_count=in_progress_count,
+        completed_today=completed_today,
+        completed_total=completed_total,
+        avg_rating=avg_rating,
+        productivity=productivity,
+        is_available=tech.is_available,
+        workshop_name=workshop_name,
+        active_incidents=active_incidents,
+        recent_completed=recent_completed,
     )
 
 

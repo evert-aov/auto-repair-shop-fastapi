@@ -18,3 +18,11 @@ def save_incident(db: Session, incident: Incident) -> Incident:
     db.commit()
     db.refresh(incident)
     return incident
+
+
+def get_pending_incidents(db: Session) -> list[Incident]:
+    """Get all incidents with status pending or matched (ready for workshop offers)"""
+    from app.module_incidents.models import IncidentStatus
+    return db.query(Incident).filter(
+        Incident.status.in_([IncidentStatus.PENDING, IncidentStatus.MATCHED])
+    ).order_by(Incident.created_at.desc()).all()
