@@ -140,7 +140,7 @@ async def find_and_create_offer(db: Session, incident: Incident) -> WorkshopOffe
         min_rating=1.0,
     )
     
-    logger.warning(f"🔎 Talleres cercanos encontrados con especialidad '{specialty_name}': {len(workshops)}")
+    logger.warning(f"🔎 BUSCANDO TALLERES para incidencia {incident.id} (Especialidad: '{specialty_name}')")
 
     scored: list[tuple] = []
     for workshop in workshops:

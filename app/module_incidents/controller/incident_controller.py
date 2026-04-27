@@ -27,7 +27,8 @@ from app.module_incidents.ai.dtos.ai_dtos import (
     AudioUploadAsyncResponse,
     TranscriptionJobStatusResponse,
 )
-from app.module_incidents.models import IncidentStatus
+from app.module_incidents.models import IncidentStatus, Rating
+from app.module_workshops.models.models import Workshop, Technician
 from app.module_incidents.repositories import (
     evidence_repository,
     incident_repository,
@@ -56,11 +57,14 @@ def _process_transcription_job(job_id: str, file_url: str):
 
 def _process_incident_with_ai(incident_id: uuid.UUID) -> None:
     db = SessionLocal()
+    logger.info(f"🕵️ INICIANDO ANÁLISIS IA para incidente {incident_id}")
     try:
         incident = incident_repository.get_incident_by_id(db, incident_id)
         if not incident:
-            logger.error(f"Incident {incident_id} not found in background task")
+            logger.error(f"❌ Incident {incident_id} no encontrado en tarea de fondo")
             return
+        
+        logger.info(f"📝 Procesando incidente: {incident.description}")
 
         evidences = evidence_repository.get_evidences_by_incident(db, incident_id)
 
@@ -97,6 +101,7 @@ def _process_incident_with_ai(incident_id: uuid.UUID) -> None:
             audio_transcript = next((ev.transcription for ev in evidence_list if ev.evidence_type.value == "audio" and ev.transcription), None)
 
             # 2. Análisis IA Multimodal
+            logger.info(f"🤖 Llamando a Vertex AI Multimodal (Imágenes: {len(image_evidences)}, Audio: {'Sí' if audio_transcript else 'No'})")
             triage_result = vertex_service.analyze_incident_multimodal(
                 description=incident.description,
                 image_urls=[ev.file_url for ev in image_evidences],
@@ -117,6 +122,7 @@ def _process_incident_with_ai(incident_id: uuid.UUID) -> None:
             if cliente.get("consejo_seguridad"): summary_parts.append(f"Consejo: {cliente['consejo_seguridad']}")
 
             # Estimación Grounded
+            logger.info("💰 Solicitando estimación de costos Grounded...")
             tecnico_info = triage_result.get("tecnico", {})
             diagnostic = tecnico_info.get("diagnostico_tecnico", incident.description)
             estimation = vertex_service.estimate_cost_grounded(diagnostic, incident.ai_category)
@@ -140,9 +146,11 @@ def _process_incident_with_ai(incident_id: uuid.UUID) -> None:
                 ev.ai_analysis = {"vertex": triage_result}
                 evidence_repository.save_evidence(db, ev)
             if incident.ai_category in ["incierto", "uncertain"] or incident.ai_confidence < 0.4:
+                logger.warning(f"⚠️ Confianza baja ({incident.ai_confidence}) o incierto. Pidiendo más info.")
                 incident.status = IncidentStatus.PENDING_INFO
                 incident_repository.save_incident(db, incident)
             else:
+                logger.info(f"✅ Análisis exitoso: Categoría={incident.ai_category}, Prioridad={incident.ai_priority}")
                 incident.status = IncidentStatus.MATCHED
                 incident_repository.save_incident(db, incident)
                 
@@ -231,7 +239,7 @@ def request_help(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    logger.info(f"Incident request from user {current_user.id}: {incident_data.description[:50]}... vehicle={incident_data.vehicle_id}")
+    logger.info(f"🆘 SOLICITUD DE AUXILIO: Usuario '{current_user.username}' solicita ayuda para vehículo {incident_data.vehicle_id}")
     try:
         incident = incident_service.create_incident_request(db, current_user, incident_data)
     except Exception as e:
@@ -273,6 +281,40 @@ def request_help(
 
 
 @router.get(
+    "/pending",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_role("workshop_owner"))],
+)
+def get_pending_incidents(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get all pending incidents available for workshop offers.
+    Returns incidents with status 'pending' or 'matched'.
+    Only accessible to workshop_owner users.
+    """
+    incidents = incident_repository.get_pending_incidents(db)
+
+    return [
+        {
+            "id": str(incident.id),
+            "status": incident.status.value,
+            "description": incident.description,
+            "ai_category": incident.ai_category,
+            "ai_priority": incident.ai_priority.value if incident.ai_priority else None,
+            "ai_confidence": incident.ai_confidence,
+            "latitude": incident.incident_lat,
+            "longitude": incident.incident_lng,
+            "estimated_arrival_min": incident.estimated_arrival_min,
+            "created_at": incident.created_at.isoformat(),
+            "updated_at": incident.updated_at.isoformat() if incident.updated_at else None,
+        }
+        for incident in incidents
+    ]
+
+
+@router.get(
     "/{incident_id}",
     response_model=dict, # Usamos dict para flexibilidad o IncidentResponseDto si lo permite
     status_code=status.HTTP_200_OK,
@@ -286,7 +328,7 @@ def get_incident(
     if not incident:
         raise HTTPException(status_code=404, detail="Incidente no encontrado")
     
-    # [MODIFICADO] Inyectando resolución en caliente de vertex_analysis
+    # [MODIFICADO] Inyectando resolución en caliente de vertex_analysis y relaciones
     evidences = evidence_repository.get_evidences_by_incident(db, incident_id)
     vertex_analysis = None
     evidence_urls = []
@@ -295,13 +337,56 @@ def get_incident(
         if ev.evidence_type.value.lower() in ["image", "audio"]:
             evidence_urls.append({
                 "url": storage_service.generate_signed_url(ev.file_url),
-                "type": ev.evidence_type.value.lower()
+                "type": ev.evidence_type.value.lower(),
+                "transcription": ev.transcription
             })
         if ev.ai_analysis and "vertex" in ev.ai_analysis:
             vertex_analysis = ev.ai_analysis["vertex"]
+
+    # Workshop & Tech Info
+    workshop_name = None
+    if incident.assigned_workshop_id:
+        w = db.query(Workshop).filter(Workshop.id == incident.assigned_workshop_id).first()
+        if w: workshop_name = w.name
+
+    tech_name = None
+    if incident.assigned_technician_id:
+        t = db.query(Technician).filter(Technician.id == incident.assigned_technician_id).first()
+        if t: tech_name = f"{t.name} {t.last_name}"
+
+    # Rating Info
+    rating_data = None
+    rating = db.query(Rating).filter(Rating.incident_id == incident_id).first()
+    if rating:
+        rating_data = {
+            "score": rating.score,
+            "comment": rating.comment,
+            "quality_score": rating.quality_score,
+            "response_time_score": rating.response_time_score
+        }
+
+    # Vehicle Info
+    vehicle_info = None
+    if incident.vehicle_id:
+        v = db.query(Vehicle).filter(Vehicle.id == incident.vehicle_id).first()
+        if v:
+            vehicle_info = {
+                "make": v.make,
+                "model": v.model,
+                "year": v.year,
+                "license_plate": v.license_plate
+            }
             
+    # Payment Status Resolution
+    from app.module_incidents.models import Payment, PaymentStatus
+    payment = db.query(Payment).filter(
+        Payment.incident_id == incident_id, 
+        Payment.status == PaymentStatus.COMPLETED
+    ).first()
+    payment_status = "completed" if payment else "pending"
+
     return {
-        "id": incident.id,
+        "id": str(incident.id),
         "status": incident.status.value,
         "description": incident.description,
         "ai_category": incident.ai_category,
@@ -312,10 +397,15 @@ def get_incident(
         "longitude": incident.incident_lng,
         "estimated_arrival_min": incident.estimated_arrival_min,
         "total_cost": incident.total_cost,
-        "created_at": incident.created_at,
-        "updated_at": incident.updated_at,
+        "payment_status": payment_status,
+        "created_at": incident.created_at.isoformat(),
+        "updated_at": incident.updated_at.isoformat() if incident.updated_at else None,
         "vertex_analysis": vertex_analysis,
-        "evidence_urls": evidence_urls
+        "evidence_urls": evidence_urls,
+        "workshop_name": workshop_name,
+        "technician_name": tech_name,
+        "rating": rating_data,
+        "vehicle": vehicle_info
     }
 
 
@@ -521,35 +611,3 @@ def get_transcription_job_status(job_id: str):
     )
 
 
-@router.get(
-    "/pending",
-    status_code=status.HTTP_200_OK,
-    dependencies=[Depends(require_role("workshop_owner"))],
-)
-def get_pending_incidents(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """
-    Get all pending incidents available for workshop offers.
-    Returns incidents with status 'pending' or 'matched'.
-    Only accessible to workshop_owner users.
-    """
-    incidents = incident_repository.get_pending_incidents(db)
-
-    return [
-        {
-            "id": str(incident.id),
-            "status": incident.status.value,
-            "description": incident.description,
-            "ai_category": incident.ai_category,
-            "ai_priority": incident.ai_priority.value if incident.ai_priority else None,
-            "ai_confidence": incident.ai_confidence,
-            "latitude": incident.incident_lat,
-            "longitude": incident.incident_lng,
-            "estimated_arrival_min": incident.estimated_arrival_min,
-            "created_at": incident.created_at.isoformat(),
-            "updated_at": incident.updated_at.isoformat() if incident.updated_at else None,
-        }
-        for incident in incidents
-    ]

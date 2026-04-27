@@ -26,6 +26,10 @@ def _credentials() -> tuple[str, str]:
 
 async def get_access_token() -> str:
     client_id, secret = _credentials()
+    if not client_id or client_id == "TU_CLIENT_ID_DE_PAYPAL":
+        logger.warning("[PayPal] Usando MODO MOCK por falta de credenciales reales.")
+        return "mock_access_token"
+        
     token = base64.b64encode(f"{client_id}:{secret}".encode()).decode()
     async with httpx.AsyncClient() as client:
         resp = await client.post(
@@ -43,9 +47,16 @@ async def get_access_token() -> str:
 async def create_order(amount_usd: float, incident_id: str) -> dict:
     """
     Crea una orden PayPal. Devuelve {order_id, approve_url}.
-    amount_usd: monto en USD (en sandbox se usa el mismo número que el BOB del incidente).
     """
     access_token = await get_access_token()
+    
+    if access_token == "mock_access_token":
+        order_id = f"MOCK-PAYPAL-{incident_id[:8].upper()}"
+        return {
+            "order_id": order_id,
+            "approve_url": f"https://www.sandbox.paypal.com/checkoutnow?token={order_id}"
+        }
+
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{_base_url()}/v2/checkout/orders",
@@ -100,6 +111,11 @@ async def send_payout(
     La plataforma retiene la comisión; el taller recibe net_amount.
     """
     access_token = await get_access_token()
+    
+    if access_token == "mock_access_token":
+        logger.info(f"[PayPal Payout Mock] Enviando {net_amount} a {workshop_email}")
+        return {"payout_id": f"MOCK-PAYOUT-{payment_id[:8]}", "payout_status": "SUCCESS"}
+
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{_base_url()}/v1/payments/payouts",
@@ -144,6 +160,15 @@ async def capture_order(order_id: str) -> dict:
     Captura el pago de una orden aprobada. Devuelve los detalles de la captura.
     """
     access_token = await get_access_token()
+    
+    if access_token == "mock_access_token":
+        return {
+            "capture_id": f"MOCK-CAPTURE-{order_id}",
+            "status": "COMPLETED",
+            "amount": 50.0, # Valor mock
+            "currency": "USD",
+        }
+
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{_base_url()}/v2/checkout/orders/{order_id}/capture",

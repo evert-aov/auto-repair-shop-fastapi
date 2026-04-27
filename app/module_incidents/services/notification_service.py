@@ -45,16 +45,7 @@ class FCMService:
                 FCMService._initialized = True
                 return
 
-            # Estrategia 1: Application Default Credentials (Recomendado para Cloud Run)
-            try:
-                firebase_admin.initialize_app()
-                FCMService._initialized = True
-                logger.info("✅ Firebase Admin SDK inicializado vía ADC (Cloud Run)")
-                return
-            except Exception as e:
-                logger.debug(f"ADC no disponible ({e}), intentando vía archivo de credenciales...")
-
-            # Estrategia 2: Archivo de credenciales (Fallback para Local)
+            # Estrategia 1: Archivo de credenciales específico (Recomendado para Local)
             key_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
             if key_path and os.path.exists(key_path):
                 try:
@@ -62,10 +53,18 @@ class FCMService:
                     firebase_admin.initialize_app(cred)
                     FCMService._initialized = True
                     logger.info(f"✅ Firebase Admin SDK inicializado vía archivo: {key_path}")
+                    return
                 except Exception as e:
                     logger.error(f"❌ Error al inicializar Firebase con archivo: {e}")
-            else:
-                logger.warning("⚠️ No se encontró FIREBASE_SERVICE_ACCOUNT_KEY ni ADC. Notificaciones deshabilitadas.")
+
+            # Estrategia 2: Application Default Credentials (Fallback para Cloud Run)
+            try:
+                firebase_admin.initialize_app()
+                FCMService._initialized = True
+                logger.info("✅ Firebase Admin SDK inicializado vía ADC (Cloud Run)")
+                return
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudo inicializar Firebase vía ADC ni archivo. Notificaciones deshabilitadas ({e}).")
 
     async def send_to_user(
             self,
@@ -162,25 +161,35 @@ class NotificationService:
         Método base: guardar en BD + enviar FCM
         """
 
-        # 1. Guardar en BD
-        notification = Notification(
-            user_id=user_id,
-            incident_id=incident_id,
-            type=notification_type,
-            title=title,
-            body=body,
-            is_read=False,
-            sent_at=datetime.now(timezone.utc),
-        )
-
-        notification = notification_repository.save_notification(self.db, notification)
+        # 1. Guardar en BD (Solo si es SERVICE_COMPLETED)
+        notification = None
+        if notification_type == NotificationType.SERVICE_COMPLETED:
+            notification = Notification(
+                user_id=user_id,
+                incident_id=incident_id,
+                type=notification_type,
+                title=title,
+                body=body,
+                is_read=False,
+                sent_at=datetime.now(timezone.utc),
+            )
+            notification = notification_repository.save_notification(self.db, notification)
+        else:
+            logger.info(f"📌 Notificación tipo {notification_type} enviada como push sin persistir en BD.")
 
         # 2. Enviar push vía FCM
         data = {
-            "notification_id": str(notification.id),
+            "notification_id": str(notification.id) if notification else str(uuid.uuid4()),
             "incident_id": str(incident_id) if incident_id else "",
             "type": notification_type.value,
         }
+
+        # Obtener username para el log
+        from app.module_users.models.models import User
+        target_user = self.db.query(User).filter(User.id == user_id).first()
+        target_name = target_user.username if target_user else str(user_id)
+
+        logger.warning(f"📣 ENVIANDO PUSH a '{target_name}' (ID: {user_id}): {title}")
 
         success = await fcm_service.send_to_user(
             user_id=user_id,
@@ -193,11 +202,11 @@ class NotificationService:
 
         if success:
             logger.info(
-                f"✅ Notificación enviada a user {user_id}: {title}"
+                f"✅ Notificación física enviada con éxito a '{target_name}'"
             )
         else:
             logger.warning(
-                f"⚠️ FCM falló para user {user_id}, pero guardada en BD"
+                f"⚠️ El envío físico falló para '{target_name}', pero la notificación quedó guardada en la campana (web)."
             )
 
         return notification

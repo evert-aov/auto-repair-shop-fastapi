@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    UUID, Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
+    UUID, Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func, SmallInteger
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -24,6 +24,7 @@ class NotificationType(str, enum.Enum):
     STATUS_UPDATE = "status_update"
     PAYMENT = "payment"
     SYSTEM = "system"
+    SERVICE_COMPLETED = "service_completed"
 
 
 class PaymentMethod(str, enum.Enum):
@@ -223,9 +224,9 @@ class Rating(Base):
     workshop_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workshops.id", ondelete="CASCADE"), nullable=False
     )
-    score: Mapped[int] = mapped_column(Integer, nullable=False)
-    response_time_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    quality_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    score: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    response_time_score: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    quality_score: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

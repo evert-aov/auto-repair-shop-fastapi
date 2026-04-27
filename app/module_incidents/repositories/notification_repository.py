@@ -22,6 +22,16 @@ def get_unread_by_user(db: Session, user_id: uuid.UUID) -> list[Notification]:
     )
 
 
+def get_all_by_user(db: Session, user_id: uuid.UUID, limit: int = 50) -> list[Notification]:
+    return (
+        db.query(Notification)
+        .filter(Notification.user_id == user_id)
+        .order_by(Notification.sent_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 def mark_as_read(db: Session, notification_id: uuid.UUID) -> Notification | None:
     notification = db.query(Notification).filter(Notification.id == notification_id).first()
     if notification:

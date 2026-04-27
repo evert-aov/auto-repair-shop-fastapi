@@ -49,6 +49,7 @@ class WorkshopStats(BaseModel):
     daily_revenue: list[dict[str, Any]]
     emergency_inbox: list[dict[str, Any]]
     technician_locations: list[dict[str, Any]]
+    recent_ratings: list[dict[str, Any]]
 
 
 class ClientStats(BaseModel):
@@ -238,12 +239,17 @@ def workshop_dashboard(
         Incident.status == IncidentStatus.COMPLETED,
     ).scalar() or 0
 
+    gross_revenue = float(
+        db.query(func.coalesce(func.sum(Incident.total_cost), 0.0))
+        .filter(Incident.assigned_workshop_id == wid, Incident.status == IncidentStatus.COMPLETED)
+        .scalar() or 0.0
+    )
+    
+    # We still use Payment table for commission as it tracks platform financial records
     rev_row = db.query(
-        func.coalesce(func.sum(Payment.gross_amount), 0.0),
         func.coalesce(func.sum(Payment.commission_amount), 0.0),
     ).filter(Payment.workshop_id == wid).first()
-    gross_revenue = float(rev_row[0])
-    commission_due = float(rev_row[1])
+    commission_due = float(rev_row[0])
 
     avg_rating = float(workshop.rating_avg or 0.0)
 
@@ -272,9 +278,10 @@ def workshop_dashboard(
             Incident.assigned_technician_id == tech.id,
             Incident.status == IncidentStatus.COMPLETED,
         ).scalar() or 0
-        t_revenue = db.query(func.coalesce(func.sum(Payment.gross_amount), 0.0)).join(
-            Incident, Payment.incident_id == Incident.id
-        ).filter(Incident.assigned_technician_id == tech.id).scalar() or 0.0
+        t_revenue = db.query(func.coalesce(func.sum(Incident.total_cost), 0.0)).filter(
+            Incident.assigned_technician_id == tech.id,
+            Incident.status == IncidentStatus.COMPLETED,
+        ).scalar() or 0.0
         tech_perf.append({
             "id": str(tech.id),
             "name": f"{tech.name} {tech.last_name[0]}." if tech.last_name else tech.name,
@@ -290,10 +297,11 @@ def workshop_dashboard(
         day = now - timedelta(days=i)
         day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
         day_end = day_start + timedelta(days=1)
-        amount = db.query(func.coalesce(func.sum(Payment.gross_amount), 0.0)).filter(
-            Payment.workshop_id == wid,
-            Payment.created_at >= day_start,
-            Payment.created_at < day_end,
+        amount = db.query(func.coalesce(func.sum(Incident.total_cost), 0.0)).filter(
+            Incident.assigned_workshop_id == wid,
+            Incident.status == IncidentStatus.COMPLETED,
+            Incident.updated_at >= day_start,
+            Incident.updated_at < day_end,
         ).scalar() or 0.0
         daily_revenue.append({"day": _DAYS_ES[day.weekday()], "revenue": float(amount)})
 
@@ -327,6 +335,27 @@ def workshop_dashboard(
         for t in technicians
     ]
 
+    # Recent ratings
+    recent_ratings_rows = (
+        db.query(Rating)
+        .filter(Rating.workshop_id == wid)
+        .order_by(Rating.created_at.desc())
+        .limit(5)
+        .all()
+    )
+    recent_ratings = [
+        {
+            "id": str(r.id),
+            "client_name": _get_client_name(db, r.client_id),
+            "score": r.score,
+            "response_time_score": r.response_time_score,
+            "quality_score": r.quality_score,
+            "comment": r.comment,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in recent_ratings_rows
+    ]
+
     return WorkshopStats(
         completed_services=completed_services,
         gross_revenue=gross_revenue,
@@ -337,6 +366,7 @@ def workshop_dashboard(
         daily_revenue=daily_revenue,
         emergency_inbox=emergency_inbox,
         technician_locations=technician_locations,
+        recent_ratings=recent_ratings,
     )
 
 
@@ -422,10 +452,7 @@ def technician_dashboard(
     ).order_by(Incident.updated_at.desc()).limit(5).all()
     recent_completed = []
     for inc in recent_rows:
-        amount = float(
-            db.query(func.coalesce(func.sum(Payment.gross_amount), 0.0))
-            .filter(Payment.incident_id == inc.id).scalar() or 0.0
-        )
+        amount = float(inc.total_cost or 0.0)
         rating = db.query(Rating).filter(Rating.incident_id == inc.id).first()
         recent_completed.append({
             "id": str(inc.id),

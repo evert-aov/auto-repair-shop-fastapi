@@ -418,7 +418,7 @@ async def complete_offer(
         notifier = NotificationService(db)
         await notifier._send_notification(
             user_id=incident.client_id,
-            notification_type=NotificationType.STATUS_UPDATE,
+            notification_type=NotificationType.SERVICE_COMPLETED,
             title="✅ Servicio finalizado",
             body=f"El taller {workshop.name} ha completado tu servicio. ¡Gracias!",
             incident_id=incident.id,
