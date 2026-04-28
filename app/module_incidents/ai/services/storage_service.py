@@ -141,9 +141,16 @@ def generate_signed_url(gs_uri: str, expiration_minutes: int = 60) -> str:
     from datetime import timedelta
     if not gs_uri.startswith("gs://"):
         return gs_uri
+
+    path = gs_uri[5:]
+    if "/" not in path:
+        logger.warning("URI de GCS invalido para firmado: %s", gs_uri)
+        return gs_uri
+
+    bucket_name, object_name = path.split("/", 1)
+    public_fallback = f"https://storage.googleapis.com/{bucket_name}/{object_name}"
+
     try:
-        path = gs_uri[5:]
-        bucket_name, object_name = path.split("/", 1)
         client = get_storage_client()
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(object_name)
@@ -162,4 +169,5 @@ def generate_signed_url(gs_uri: str, expiration_minutes: int = 60) -> str:
             e,
             exc_info=True,
         )
-        raise RuntimeError(f"No se pudo generar signed URL: {e}") from e
+        logger.warning("Usando fallback HTTP sin firma para %s", gs_uri)
+        return public_fallback
