@@ -4,12 +4,15 @@ import subprocess
 import tempfile
 import uuid
 import io
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from PIL import Image, ImageEnhance, ImageOps
 
 from fastapi import UploadFile
 from google.cloud import storage
+
+logger = logging.getLogger(__name__)
 
 GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "")
 GCS_AUDIO_PREFIX = os.getenv("GCS_AUDIO_PREFIX", "incident-audio")
@@ -144,7 +147,19 @@ def generate_signed_url(gs_uri: str, expiration_minutes: int = 60) -> str:
         client = get_storage_client()
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(object_name)
-        return blob.generate_signed_url(version="v4", expiration=timedelta(minutes=expiration_minutes), method="GET")
+        signed_url = blob.generate_signed_url(
+            version="v4",
+            expiration=timedelta(minutes=expiration_minutes),
+            method="GET",
+        )
+        logger.info("Signed URL generada para %s", gs_uri)
+        return signed_url
     except Exception as e:
-        return gs_uri
-
+        logger.error(
+            "generate_signed_url fallo para %s: %s: %s",
+            gs_uri,
+            type(e).__name__,
+            e,
+            exc_info=True,
+        )
+        raise RuntimeError(f"No se pudo generar signed URL: {e}") from e
