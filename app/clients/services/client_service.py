@@ -4,9 +4,9 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.security.dto.client_dtos import ClientCreateDTO, ClientUpdateDTO
-from app.security.models import Client
-from app.security.repository.client_repository import ClientRepository
+from app.clients.dtos.client_dtos import ClientCreateDTO, ClientUpdateDTO
+from app.clients.models import Client
+from app.clients.repositories.client_repository import ClientRepository
 from app.users.repositories.user_repository import UserRepository
 from app.users.repositories.role_repository import RoleRepository
 from app.users.services.user_service import UserService
@@ -41,7 +41,6 @@ class ClientService:
             )
 
         # 3. Crear el Client directamente (hereda de User via joined-table inheritance)
-        #    SQLAlchemy inserta automáticamente en 'users' y 'clients'.
         client = Client(
             username=self.user_service.generate_username(),
             name=data.user.name,

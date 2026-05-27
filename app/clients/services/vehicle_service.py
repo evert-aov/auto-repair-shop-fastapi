@@ -4,10 +4,11 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.users.dtos.vehicle_dtos import VehicleCreateDTO, VehicleUpdateDTO
-from app.security.models import Vehicle
-from app.users.repositories.vehicle_repository import VehicleRepository
-from app.security.repository.client_repository import ClientRepository
+from app.clients.dtos.vehicle_dtos import VehicleCreateDTO, VehicleUpdateDTO
+from app.clients.models import Vehicle
+from app.clients.repositories.vehicle_repository import VehicleRepository
+from app.clients.repositories.client_repository import ClientRepository
+from app.users.models import User
 
 
 class VehicleService:
@@ -61,17 +62,13 @@ class VehicleService:
         - Admin: ve todos los vehículos
         - Client: ve solo sus propios vehículos
         """
-        # Verificar si el usuario tiene rol 'admin'
         user_roles = {r.name for r in current_user.roles}
 
         if "admin" in user_roles:
-            # Admin puede ver todos los vehículos
             return self.vehicle_repository.get_all()
         elif "client" in user_roles:
-            # Cliente solo ve sus propios vehículos
             return self.vehicle_repository.get_by_client_id(current_user.id)
         else:
-            # Otros roles no tienen acceso
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permiso para acceder a los vehículos",
@@ -87,7 +84,6 @@ class VehicleService:
         return vehicle
 
     def get_vehicles_by_client_id(self, client_id: UUID) -> list[Vehicle]:
-        # Validar que el cliente exista
         client = self.client_repository.get_by_id(client_id)
         if not client:
             raise HTTPException(

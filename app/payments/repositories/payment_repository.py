@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy.orm import Session
-from app.incidents.models import Payment
+from app.payments.models import Payment
 
 
 class PaymentRepository:

@@ -31,7 +31,7 @@ def _cleanup_old_notifications():
     db = SessionLocal()
     try:
         from datetime import datetime, timedelta, timezone
-        from app.incidents.models import Notification
+        from app.notifications.models import Notification
 
         thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
         deleted = db.query(Notification).filter(

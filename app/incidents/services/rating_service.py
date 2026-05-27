@@ -3,10 +3,11 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.incidents.dtos.rating_dtos import RatingCreateDto
-from app.incidents.models import Rating, Incident, IncidentStatus, Payment, PaymentStatus
+from app.incidents.models import Rating, Incident, IncidentStatus
+from app.payments.models import Payment, PaymentStatus
 from app.incidents.repositories.rating_repository import RatingRepository
 from app.incidents.repositories.incident_repository import IncidentRepository
-from app.incidents.repositories.payment_repository import PaymentRepository
+from app.payments.repositories.payment_repository import PaymentRepository
 from app.workshops.models import Workshop
 from app.users.models import User
 

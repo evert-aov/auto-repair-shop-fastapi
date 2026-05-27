@@ -9,6 +9,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.users.models.user import User
+from app.workshops.models.workshop_specialty import WorkshopSpecialty
+
+from app.workshops.models.technician import Technician
 
 if TYPE_CHECKING:
     from app.incidents.models import Rating, Payment, WorkshopOffer
@@ -56,7 +59,7 @@ class Workshop(Base):
         creator=lambda specialty: WorkshopSpecialty(specialty=specialty),
     )
     technicians: Mapped[list["Technician"]] = relationship(
-        "Technician", back_populates="workshop", foreign_keys="[Technician.workshop_id]"
+        "Technician", back_populates="workshop", foreign_keys="Technician.workshop_id"
     )
     ratings: Mapped[list["Rating"]] = relationship("Rating", back_populates="workshop")
     payments: Mapped[list["Payment"]] = relationship("Payment", back_populates="workshop")

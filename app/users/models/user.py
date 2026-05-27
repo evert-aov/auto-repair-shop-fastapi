@@ -8,10 +8,10 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.users.models.role import Role
-    from app.incidents.models.notification import Notification
+    from app.notifications.models.notification import Notification
 else:
     # Import at runtime so SQLAlchemy registry registers the class name 'Notification'
-    import app.incidents.models.enums as _incidents_models  # noqa: F401
+    import app.notifications.models  # noqa: F401
 
 role_user = Table(
     'role_user', Base.metadata,

@@ -126,7 +126,7 @@ class AssignmentService:
         YANGO REAL N=1: find the best workshop, create a single exclusive offer.
         Returns the created offer, or None if no candidates found.
         """
-        from app.incidents.services.notification_service import NotificationService
+        from app.notifications.services.notification_service import NotificationService
 
         specialty_name = _CATEGORY_TO_SPECIALTY.get(incident.ai_category or "")
         if not specialty_name:
@@ -218,7 +218,7 @@ class AssignmentService:
         return offer
 
     async def _mark_no_offers(self, incident: Incident) -> None:
-        from app.incidents.services.notification_service import NotificationService
+        from app.notifications.services.notification_service import NotificationService
 
         prev = incident.status.value if incident.status else None
         incident.status = IncidentStatus.NO_OFFERS

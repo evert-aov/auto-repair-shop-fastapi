@@ -15,14 +15,14 @@ from app.incidents.models import (
 )
 
 if TYPE_CHECKING:
-    from app.incidents.models import (
-        IncidentEvidence,
-        Payment,
-        Rating,
-        Notification,
-        IncidentStatusHistory,
-        WorkshopOffer
-    )
+    from app.notifications.models.notification import Notification
+
+if TYPE_CHECKING:
+    from app.incidents.models.incident_evidence import IncidentEvidence
+    from app.incidents.models.payment import Payment
+    from app.incidents.models.rating import Rating
+    from app.incidents.models.incident_status_history import IncidentStatusHistory
+    from app.incidents.models.workshop_offer import WorkshopOffer
 
 
 class Incident(Base):

@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.users.dtos.vehicle_dtos import VehicleCreateDTO, VehicleResponseDTO, VehicleUpdateDTO
-from app.users.services.vehicle_service import VehicleService
+from app.clients.dtos.vehicle_dtos import VehicleCreateDTO, VehicleResponseDTO, VehicleUpdateDTO
+from app.clients.services.vehicle_service import VehicleService
 from app.security.config.security import require_permission, get_current_user
 
 router = APIRouter(prefix="/api/vehicles", tags=["Vehicles"])

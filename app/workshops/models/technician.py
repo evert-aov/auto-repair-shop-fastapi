@@ -28,7 +28,7 @@ class Technician(User):
     is_available: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("TRUE"))
 
     workshop: Mapped["Workshop"] = relationship(
-        "Workshop", back_populates="technicians", foreign_keys="[Technician.workshop_id]"
+        "Workshop", back_populates="technicians", foreign_keys="Technician.workshop_id"
     )
 
     __mapper_args__ = {

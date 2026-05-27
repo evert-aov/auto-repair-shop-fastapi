@@ -41,7 +41,7 @@ def _user_roles(current_user) -> list[str]:  # type: ignore[type-arg]
 @router.get("/catalog", response_model=list[ReportTypeDefinition])
 def get_catalog(
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("report:read", "report:create", "report:update", "report:delete")),
+    current_user=Depends(require_permission("reports:read", "reports:create", "reports:update", "reports:delete")),
 ):
     roles = _user_roles(current_user)
     repo = ReportRepository(db)
@@ -60,7 +60,7 @@ def get_catalog(
 def run_report(
     req: ReportRunRequest,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("report:read", "report:create", "report:update", "report:delete")),
+    current_user=Depends(require_permission("reports:read", "reports:create", "reports:update", "reports:delete")),
 ):
     roles = _user_roles(current_user)
     workshop_id = (
@@ -92,7 +92,7 @@ def export_report(
     title: str = Query("Reporte"),
     lang: str = Query("es", pattern="^(es|en)$"),
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("report:create", "report:update", "report:delete")),
+    current_user=Depends(require_permission("reports:create", "reports:update", "reports:delete")),
 ):
     roles = _user_roles(current_user)
     workshop_id = (
@@ -141,7 +141,7 @@ def export_report(
 @router.get("/templates", response_model=list[ReportTemplateResponse])
 def list_templates(
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("report:read", "report:create", "report:update", "report:delete")),
+    current_user=Depends(require_permission("reports:read", "reports:create", "reports:update", "reports:delete")),
 ):
     repo = ReportRepository(db)
     return repo.get_templates(current_user.id)
@@ -151,7 +151,7 @@ def list_templates(
 def save_template(
     data: ReportTemplateCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("report:create", "report:update", "report:delete")),
+    current_user=Depends(require_permission("reports:create", "reports:update", "reports:delete")),
 ):
     roles = _user_roles(current_user)
     if data.report_type not in CATALOG:
@@ -167,7 +167,7 @@ def save_template(
 def get_one_template(
     template_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("report:read", "report:create", "report:update", "report:delete")),
+    current_user=Depends(require_permission("reports:read", "reports:create", "reports:update", "reports:delete")),
 ):
     repo = ReportRepository(db)
     tpl = repo.get_template(template_id, current_user.id)
@@ -181,7 +181,7 @@ def edit_template(
     template_id: uuid.UUID,
     data: ReportTemplateUpdate,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("report:create", "report:update", "report:delete")),
+    current_user=Depends(require_permission("reports:create", "reports:update", "reports:delete")),
 ):
     repo = ReportRepository(db)
     tpl = repo.get_template(template_id, current_user.id)
@@ -196,7 +196,7 @@ def edit_template(
 def remove_template(
     template_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user=Depends(require_permission("report:create", "report:update", "report:delete")),
+    current_user=Depends(require_permission("reports:create", "reports:update", "reports:delete")),
 ):
     repo = ReportRepository(db)
     tpl = repo.get_template(template_id, current_user.id)

@@ -6,13 +6,14 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.incidents.models import (
-    Incident, IncidentStatus, Payment, PaymentStatus,
+    Incident, IncidentStatus,
     WorkshopOffer, OfferStatus, Rating,
 )
+from app.payments.models import Payment, PaymentStatus
 from app.users.dtos.dashboard_dtos import TechnicianStats, ClientStats, WorkshopStats, AdminStats
 from app.workshops.models import Workshop, Technician
 from app.users.models.user import User
-from app.security.models import Client, Vehicle
+from app.clients.models import Client, Vehicle
 from app.security.config.security import require_permission
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
@@ -298,12 +299,31 @@ def technician_dashboard(
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
 
-    # Technician profile
-    tech = db.query(Technician).filter(Technician.id == tid).first()
-    if not tech:
-        raise HTTPException(status_code=404, detail="Técnico no encontrado")
+    # Fetch technician data via raw SQL to bypass SQLAlchemy polymorphic
+    # deferred-load issues (the owner may have type!='technician' in users table).
+    from sqlalchemy import text as _sql_text
+    from app.workshops.models.workshop import Workshop as _Workshop
 
-    workshop_name = _get_workshop_name(db, tech.workshop_id)
+    tech_row = db.execute(
+        _sql_text(
+            "SELECT t.workshop_id, t.is_available "
+            "FROM technicians t WHERE t.id = :tid"
+        ),
+        {"tid": str(tid)}
+    ).first()
+
+    if not tech_row:
+        # Fallback: look up via Workshop.owner_user_id
+        ws_for_tech = db.query(_Workshop).filter(_Workshop.owner_user_id == tid).first()
+        if not ws_for_tech:
+            raise HTTPException(status_code=404, detail="Técnico no encontrado")
+        tech_workshop_id = ws_for_tech.id
+        tech_is_available = True
+    else:
+        tech_workshop_id = tech_row[0]
+        tech_is_available = bool(tech_row[1])
+
+    workshop_name = _get_workshop_name(db, tech_workshop_id)
 
     # Incident counters
     assigned_count = db.query(func.count(Incident.id)).filter(
@@ -389,7 +409,7 @@ def technician_dashboard(
         completed_total=completed_total,
         avg_rating=avg_rating,
         productivity=productivity,
-        is_available=tech.is_available,
+        is_available=tech_is_available,
         workshop_name=workshop_name,
         active_incidents=active_incidents,
         recent_completed=recent_completed,

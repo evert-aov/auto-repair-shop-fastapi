@@ -3,5 +3,4 @@ from app.users.dtos import (
     permission_dtos,
     role_dtos,
     user_dtos,
-    vehicle_dtos,
 )

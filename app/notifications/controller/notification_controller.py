@@ -4,13 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.incidents.dtos.notification_dtos import NotificationDto
-from app.incidents.models import Notification
-from app.incidents.repositories.notification_repository import NotificationRepository
+from app.notifications.dtos.notification_dtos import NotificationDto
+from app.notifications.models import Notification
+from app.notifications.repositories.notification_repository import NotificationRepository
 from app.users.models import User
 from app.security.config.security import get_current_user
+from app.payments.models import Payment, PaymentStatus
 
-router = APIRouter(prefix="/notifications", tags=["Notifications"])
+router = APIRouter(prefix="/api/notifications", tags=["Notifications"])
 
 @router.get("", response_model=List[NotificationDto])
 def get_my_notifications(
@@ -24,7 +25,6 @@ def get_my_notifications(
     notifications = NotificationRepository(db).get_all_by_user(current_user.id, limit=limit)
     
     result = []
-    from app.incidents.models import Payment, PaymentStatus
     for n in notifications:
         pay_status = "pending"
         if n.incident_id:

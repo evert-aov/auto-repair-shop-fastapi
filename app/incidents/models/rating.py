@@ -9,11 +9,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
-if TYPE_CHECKING:
-    from app.security.models import Client
-    from app.workshops.models import Workshop
-    from app.incidents.models import Incident
-
+from app.notifications.models.notification import Notification
+from app.incidents.models.incident import Incident
+from app.clients.models.client import Client
+from app.workshops.models.workshop import Workshop
 
 class Rating(Base):
     __tablename__ = "ratings"

@@ -62,7 +62,7 @@ class WorkshopRepository:
             .join(WorkshopSpecialty, Workshop.id == WorkshopSpecialty.workshop_id)
             .filter(
                 WorkshopSpecialty.specialty_id == specialty_id,
-                Workshop.rating_avg >= min_rating,
+                (Workshop.rating_avg >= min_rating) | (Workshop.rating_avg == 0.0),
                 Workshop.is_active.is_(True),
                 Workshop.is_verified.is_(True),
             )

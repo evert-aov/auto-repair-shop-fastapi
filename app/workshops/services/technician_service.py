@@ -44,18 +44,16 @@ class TechnicianService:
     # ── Owner ─────────────────────────────────────────────────────────────────────
 
     def get_owner_workshop_id(self, owner_user_id: uuid.UUID) -> uuid.UUID:
-        owner_profile = self.user_repository.get_by_id(owner_user_id)
-        if not owner_profile:
+        from app.workshops.models.workshop import Workshop
+        workshop = self.db.query(Workshop).filter(
+            Workshop.owner_user_id == owner_user_id
+        ).first()
+        if not workshop:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Perfil de dueño de taller no encontrado",
+                detail="Taller no encontrado para este propietario",
             )
-        if not any(role.name == "workshop_owner" for role in owner_profile.roles):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="El usuario no es dueño de taller",
-            )
-        return owner_profile.workshop_id
+        return workshop.id
 
     # ── CRUD ─────────────────────────────────────────────────────────────────────
 

@@ -1,3 +1,4 @@
+import enum
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -8,11 +9,23 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.incidents.models import NotificationType
 
 if TYPE_CHECKING:
-    from app.users.models import User
-    from app.incidents.models import Incident
+    from app.users.models.user import User
+    from app.incidents.models.incident import Incident
+
+# Import Incident for relationship registration
+
+
+
+class NotificationType(str, enum.Enum):
+    NEW_REQUEST = "new_request"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    STATUS_UPDATE = "status_update"
+    PAYMENT = "payment"
+    SYSTEM = "system"
+    SERVICE_COMPLETED = "service_completed"
 
 
 class Notification(Base):

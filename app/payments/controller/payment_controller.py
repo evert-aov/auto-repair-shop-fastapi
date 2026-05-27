@@ -6,11 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.incidents.models import IncidentStatus, Payment, PaymentMethod, PaymentStatus
+from app.incidents.models import IncidentStatus
 from app.incidents.repositories.incident_repository import IncidentRepository
-from app.incidents.repositories.payment_repository import PaymentRepository
-from app.incidents.dtos.payment_dtos import CreateOrderDTO, OrderCreatedDTO, PaymentResponseDTO
-from app.incidents.services.paypal_service import PaypalService
+from app.payments.models import Payment, PaymentMethod, PaymentStatus
+from app.payments.repositories.payment_repository import PaymentRepository
+from app.payments.dtos.payment_dtos import CreateOrderDTO, OrderCreatedDTO, PaymentResponseDTO
+from app.payments.services.paypal_service import PaypalService
 from app.workshops.models import Workshop
 from app.workshops.repositories.workshop_repository import WorkshopRepository
 from app.security.config.security import get_current_user, require_permission

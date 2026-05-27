@@ -3,10 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.security.models import TransmissionType, FuelType
+from app.clients.models import TransmissionType, FuelType
 
-
-# ── Create / Update ──────────────────────────────────────────────────────────
 
 class VehicleCreateDTO(BaseModel):
     client_id: UUID
@@ -31,8 +29,6 @@ class VehicleUpdateDTO(BaseModel):
     vin: str | None = None
     is_active: bool | None = None
 
-
-# ── Response ─────────────────────────────────────────────────────────────────
 
 class VehicleResponseDTO(BaseModel):
     id: UUID

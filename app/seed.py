@@ -12,7 +12,7 @@ from app.database import SessionLocal, Base, engine
 from app.users.models.permission import Permission
 from app.users.models.role import Role
 from app.users.models.user import User
-from app.security.models.models import Client, Vehicle, TransmissionType, FuelType
+from app.clients.models import Client, Vehicle, TransmissionType, FuelType
 from app.workshops.models import Workshop, Technician, Specialty, WorkshopSpecialty
 
 
@@ -298,7 +298,11 @@ def run_seed():
             existing = db.query(Role).filter(Role.name == role_name).first()
             if existing:
                 role_map[role_name] = existing
-                print(f"  ⏭  Rol ya existe: {role_name}")
+                if config["actions"] == "*":
+                    existing.permissions = list(perm_map.values())
+                else:
+                    existing.permissions = [perm_map[a] for a in config["actions"]]
+                print(f"  ⏭  Rol ya existe (permisos actualizados): {role_name} ({len(existing.permissions)} permisos)")
             else:
                 role = Role(name=role_name, description=config["description"])
                 if config["actions"] == "*":
@@ -358,6 +362,7 @@ def run_seed():
                 is_available=True,
                 is_verified=True,
                 commission_rate=10.0,
+                rating_avg=5.0,
             )
             db.add(workshop)
             db.flush()
@@ -514,7 +519,7 @@ def run_seed():
             print(f"  ✅ Admin-Cliente creado con vehículo ADM-999")
 
         # 9. Crear Admin-Tecnico (Híbrido)
-        existing_admin_tech = db.query(Technician).filter(Technician.username == ADMIN_TECH_USER["username"]).first()
+        existing_admin_tech = db.query(User).filter(User.username == ADMIN_TECH_USER["username"]).first()
         if not existing_admin_tech:
             admin_tech = Technician(
                 username=ADMIN_TECH_USER["username"],

@@ -15,7 +15,7 @@ from app.incidents.models import (
 from app.incidents.repositories.incident_repository import IncidentRepository
 from app.incidents.repositories.offer_repository import OfferRepository
 from app.incidents.repositories.status_history_repository import StatusHistoryRepository
-from app.incidents.services.notification_service import NotificationService
+from app.notifications.services.notification_service import NotificationService
 from app.workshops.models import Technician
 from app.workshops.repositories.workshop_repository import WorkshopRepository
 

@@ -1,3 +1,4 @@
+import enum
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -8,12 +9,27 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.incidents.models.enums import PaymentMethod, PaymentStatus
 
 if TYPE_CHECKING:
-    from app.security.models import Client
+    from app.clients.models import Client
     from app.workshops.models import Workshop
     from app.incidents.models import Incident
+
+
+class PaymentMethod(str, enum.Enum):
+    QR = "qr"
+    CARD = "card"
+    CASH = "cash"
+    TRANSFER = "transfer"
+    PAYPAL = "paypal"
+
+
+class PaymentStatus(str, enum.Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    REFUNDED = "refunded"
 
 
 class Payment(Base):

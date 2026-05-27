@@ -258,7 +258,7 @@ def request_help(
     )
 
     # [CONECTADO] Notificar al cliente que la solicitud fue recibida
-    from app.incidents.services.notification_service import NotificationService
+    from app.notifications.services.notification_service import NotificationService
     notifier = NotificationService(db)
     background_tasks.add_task(notifier.notify_client_incident_created, current_user.id, incident)
 
@@ -282,8 +282,9 @@ def get_my_active_incident(
     db: Session = Depends(get_db),
 ):
     """Returns the client's most recent non-final incident, or null."""
-    from app.incidents.models.enums import Incident as IncidentModel, IncidentStatus
-    from app.security.models import Client
+    from app.incidents.models.incident import Incident as IncidentModel
+    from app.incidents.models.enums import IncidentStatus
+    from app.clients.models import Client
 
     client = db.query(Client).filter(Client.id == current_user.id).first()
     if not client:
@@ -419,7 +420,7 @@ def get_incident(
             }
             
     # Payment Status Resolution
-    from app.incidents.models import Payment, PaymentStatus
+    from app.payments.models import Payment, PaymentStatus
     payment = db.query(Payment).filter(
         Payment.incident_id == incident_id, 
         Payment.status == PaymentStatus.COMPLETED

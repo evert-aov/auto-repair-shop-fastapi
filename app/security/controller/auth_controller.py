@@ -5,12 +5,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.security.dto.client_dtos import ClientCreateDTO, ClientResponseDTO
+from app.clients.dtos.client_dtos import ClientCreateDTO, ClientResponseDTO
 from app.users.dtos.user_dtos import UserResponseDto
 from app.security.config.security import get_current_user, require_permission
 from app.security.dto.auth_dtos import LoginRequestDto, LoginResponseDto, ProfileUpdateDto
 from app.security.service.auth_service import AuthService
-from app.security.service.client_service import ClientService
+from app.clients.services.client_service import ClientService
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 

@@ -4,7 +4,7 @@ from starlette import status
 
 from app.users.repositories.user_repository import UserRepository
 from app.users.services.user_service import UserService
-from app.security.repository.client_repository import ClientRepository
+from app.clients.repositories.client_repository import ClientRepository
 from app.security.config.security import create_access_token
 from app.security.dto.auth_dtos import LoginRequestDto, LoginResponseDto, ProfileUpdateDto, RoleDto
 

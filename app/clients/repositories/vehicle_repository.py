@@ -1,9 +1,6 @@
 from uuid import UUID
-
 from sqlalchemy.orm import Session
-
-from app.security.models import Vehicle
-
+from app.clients.models import Vehicle
 
 class VehicleRepository:
     db: Session

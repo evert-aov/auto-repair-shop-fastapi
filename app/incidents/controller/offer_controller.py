@@ -367,7 +367,7 @@ async def complete_offer(
         )
         
         # Notificación al cliente
-        from app.incidents.services.notification_service import NotificationService
+        from app.notifications.services.notification_service import NotificationService
         notifier = NotificationService(db)
         await notifier._send_notification(
             user_id=incident.client_id,

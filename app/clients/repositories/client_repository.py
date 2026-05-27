@@ -1,9 +1,6 @@
 from uuid import UUID
-
 from sqlalchemy.orm import Session
-
-from app.security.models import Client
-
+from app.clients.models import Client
 
 class ClientRepository:
     db: Session

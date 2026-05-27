@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.incidents.models import Notification
+from app.notifications.models import Notification
 
 
 class NotificationRepository:

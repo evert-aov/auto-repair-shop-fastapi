@@ -1,9 +1,3 @@
-# app/incidents/services/notification_service.py
-"""
-Servicio de notificaciones push usando Firebase Cloud Messaging (FCM)
-Integra con la tabla 'notifications' y envía push a dispositivos móviles
-"""
-
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -11,13 +5,9 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.incidents.models import (
-    Incident,
-    Notification,
-    NotificationType,
-    WorkshopOffer,
-)
-from app.incidents.repositories import notification_repository
+from app.incidents.models import Incident, WorkshopOffer
+from app.notifications.models import Notification, NotificationType
+from app.notifications.repositories.notification_repository import NotificationRepository
 from app.workshops.models import Workshop
 
 logger = logging.getLogger(__name__)
@@ -40,12 +30,10 @@ class FCMService:
             import firebase_admin
             from firebase_admin import credentials
 
-            # Si ya hay una app inicializada, no hacemos nada
             if firebase_admin._apps:
                 FCMService._initialized = True
                 return
 
-            # Estrategia 1: Archivo de credenciales específico (Recomendado para Local)
             key_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
             if key_path and os.path.exists(key_path):
                 try:
@@ -57,7 +45,6 @@ class FCMService:
                 except Exception as e:
                     logger.error(f"❌ Error al inicializar Firebase con archivo: {e}")
 
-            # Estrategia 2: Application Default Credentials (Fallback para Cloud Run)
             try:
                 firebase_admin.initialize_app()
                 FCMService._initialized = True
@@ -75,28 +62,22 @@ class FCMService:
             priority: str = "normal",
             db=None,
     ) -> bool:
-        """
-        Envía notificación push real via FCM al dispositivo del usuario.
-        Busca el fcm_token en la BD. Si no tiene token, solo guarda en BD.
-        """
         try:
-            # Obtener FCM token del usuario desde BD
             fcm_token = None
             if db is not None:
-                from app.users.models.models import User
+                from app.users.models import User
                 user = db.query(User).filter(User.id == user_id).first()
                 if user:
                     fcm_token = user.fcm_token
 
             if not fcm_token:
                 logger.info(f"[FCM] User {user_id} no tiene token FCM registrado — solo guardado en BD")
-                return True  # No es un error, simplemente no hay dispositivo registrado
+                return True
 
             if not FCMService._initialized:
                 logger.warning(f"[FCM] SDK no inicializado — simulando envío a user {user_id}: {title}")
                 return True
 
-            # Envío real con Firebase Admin SDK
             import firebase_admin
             from firebase_admin import messaging
 
@@ -147,6 +128,7 @@ class NotificationService:
 
     def __init__(self, db: Session):
         self.db = db
+        self.notification_repository = NotificationRepository(db)
 
     async def _send_notification(
             self,
@@ -157,11 +139,6 @@ class NotificationService:
             incident_id: Optional[uuid.UUID] = None,
             priority: str = "normal"
     ) -> Notification:
-        """
-        Método base: guardar en BD + enviar FCM
-        """
-
-        # 1. Guardar en BD (Solo si es SERVICE_COMPLETED)
         notification = None
         if notification_type == NotificationType.SERVICE_COMPLETED:
             notification = Notification(
@@ -173,19 +150,17 @@ class NotificationService:
                 is_read=False,
                 sent_at=datetime.now(timezone.utc),
             )
-            notification = notification_repository.save_notification(self.db, notification)
+            notification = self.notification_repository.save(notification)
         else:
             logger.info(f"📌 Notificación tipo {notification_type} enviada como push sin persistir en BD.")
 
-        # 2. Enviar push vía FCM
         data = {
             "notification_id": str(notification.id) if notification else str(uuid.uuid4()),
             "incident_id": str(incident_id) if incident_id else "",
             "type": notification_type.value,
         }
 
-        # Obtener username para el log
-        from app.users.models.models import User
+        from app.users.models import User
         target_user = self.db.query(User).filter(User.id == user_id).first()
         target_name = target_user.username if target_user else str(user_id)
 
@@ -201,19 +176,11 @@ class NotificationService:
         )
 
         if success:
-            logger.info(
-                f"✅ Notificación física enviada con éxito a '{target_name}'"
-            )
+            logger.info(f"✅ Notificación física enviada con éxito a '{target_name}'")
         else:
-            logger.warning(
-                f"⚠️ El envío físico falló para '{target_name}', pero la notificación quedó guardada en la campana (web)."
-            )
+            logger.warning(f"⚠️ El envío físico falló para '{target_name}', pero la notificación quedó guardada en la campana (web).")
 
         return notification
-
-    # =================================================================
-    # NOTIFICACIONES A TALLERES
-    # =================================================================
 
     async def notify_workshop_new_offer(
             self,
@@ -221,11 +188,6 @@ class NotificationService:
             incident: Incident,
             offer: WorkshopOffer
     ) -> Notification:
-        """
-        🔔 Notificar al taller que tiene una nueva oferta
-        Enviada cuando se crea la offer (CU10)
-        """
-
         priority_emoji = {
             "LOW": "🟢",
             "MEDIUM": "🟡",
@@ -265,11 +227,6 @@ class NotificationService:
             workshop: Workshop,
             incident: Incident
     ) -> Notification:
-        """
-        🔔 Notificar al taller que otro taller ya aceptó
-        Enviada cuando un offer pasa a "expired"
-        """
-
         title = "Solicitud ya asignada"
         body = f"Otro taller aceptó la solicitud #{str(incident.id)[:8]}"
 
@@ -282,19 +239,11 @@ class NotificationService:
             priority="normal",
         )
 
-    # =================================================================
-    # NOTIFICACIONES AL CLIENTE
-    # =================================================================
-
     async def notify_client_incident_created(
             self,
             client_id: uuid.UUID,
             incident: Incident
     ) -> Notification:
-        """
-        🔔 Confirmación al cliente de que su solicitud fue recibida
-        """
-
         title = "Solicitud recibida"
         body = f"Tu solicitud de auxilio #{str(incident.id)[:8]} está siendo procesada"
 
@@ -313,11 +262,6 @@ class NotificationService:
             workshop: Workshop,
             estimated_arrival_min: int
     ) -> Notification:
-        """
-        🔔 Notificar al cliente que un taller ACEPTÓ
-        Esta es LA notificación clave para el cliente
-        """
-
         title = f"✅ {workshop.name} aceptó tu solicitud"
 
         body = f"Tiempo estimado de llegada: {estimated_arrival_min} min"
@@ -331,7 +275,7 @@ class NotificationService:
             title=title,
             body=body,
             incident_id=incident.id,
-            priority="high"  # Alta prioridad (buena noticia)
+            priority="high"
         )
 
     async def notify_client_offer_rejected(
@@ -340,11 +284,6 @@ class NotificationService:
             workshop: Workshop,
             reason: Optional[str] = None
     ) -> Notification:
-        """
-        🔔 Notificar al cliente que un taller rechazó
-        (Opcional, puede ser molesto si rechaza el primero)
-        """
-
         title = "Buscando otro taller..."
 
         body = f"{workshop.name} no está disponible en este momento."
@@ -373,11 +312,6 @@ class NotificationService:
             self,
             incident: Incident
     ) -> Notification:
-        """
-        🔔 Notificar al cliente que la IA necesita más información
-        Cuando ai_confidence < 0.4
-        """
-
         title = "Necesitamos más detalles"
 
         body = (
@@ -398,10 +332,6 @@ class NotificationService:
             self,
             incident: Incident
     ) -> Notification:
-        """
-        🔔 Notificar al cliente que NO hay talleres disponibles
-        """
-
         title = "No hay talleres disponibles"
 
         body = (
@@ -425,10 +355,6 @@ class NotificationService:
             workshop: Workshop,
             technician_name: str
     ) -> Notification:
-        """
-        🔔 Notificar al cliente que el técnico va en camino
-        """
-
         title = f"🚗 {technician_name} está en camino"
 
         body = f"Taller: {workshop.name}"
@@ -444,4 +370,3 @@ class NotificationService:
             incident_id=incident.id,
             priority="high"
         )
-

@@ -24,13 +24,14 @@ class WorkshopService:
         self.technician_repo = TechnicianRepository(db)
         self.db = db
 
-    def _get_owner_profile(self, owner_user_id: uuid.UUID) -> Technician:
-        owner_profile = self.technician_repo.get_by_id(owner_user_id)
-        if not owner_profile:
-            raise HTTPException(status_code=404, detail="Perfil de taller no encontrado")
-        if not any(role.name == "workshop_owner" for role in owner_profile.roles):
-            raise HTTPException(status_code=403, detail="El usuario no es dueño de taller")
-        return owner_profile
+    def _get_owner_workshop(self, owner_user_id: uuid.UUID) -> Workshop:
+        """Return the Workshop whose owner_user_id matches. Avoids deferred workshop_id load."""
+        workshop = self.db.query(Workshop).filter(
+            Workshop.owner_user_id == owner_user_id
+        ).first()
+        if not workshop:
+            raise HTTPException(status_code=404, detail="Taller no encontrado para este propietario")
+        return workshop
 
     def register_public(self, dto: WorkshopRegisterPublic) -> Workshop:
         user_repo = UserRepository(self.db)
@@ -96,12 +97,12 @@ class WorkshopService:
         return workshop
 
     def get_by_owner_user_id(self, owner_user_id: uuid.UUID) -> Workshop:
-        owner_profile = self._get_owner_profile(owner_user_id)
-        return self.get_by_id(owner_profile.workshop_id)
+        workshop = self._get_owner_workshop(owner_user_id)
+        return self.get_by_id(workshop.id)
 
     def update_by_owner_user_id(self, owner_user_id: uuid.UUID, dto: WorkshopUpdate) -> Workshop:
-        owner_profile = self._get_owner_profile(owner_user_id)
-        return self.update_owner(owner_profile.workshop_id, dto)
+        workshop = self._get_owner_workshop(owner_user_id)
+        return self.update_owner(workshop.id, dto)
 
     def get_by_id(self, workshop_id: uuid.UUID) -> Workshop:
         workshop = self.repository.get_by_id(workshop_id)

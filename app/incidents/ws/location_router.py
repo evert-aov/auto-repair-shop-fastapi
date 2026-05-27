@@ -88,7 +88,7 @@ async def location_ws(
             # ── Send last known location immediately ──────────────────────────
             db = SessionLocal()
             try:
-                from app.incidents.models.enums import Incident
+                from app.incidents.models.incident import Incident
                 incident = db.query(Incident).filter(
                     Incident.id == incident_id
                 ).first()
