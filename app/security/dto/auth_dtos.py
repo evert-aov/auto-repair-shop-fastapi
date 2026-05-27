@@ -5,9 +5,18 @@ class LoginRequestDto(BaseModel):
     username: str
     password: str
 
+class PermissionDto(BaseModel):
+    id: int
+    name: str
+    action: str
+
+    class Config:
+        from_attributes = True
+
 class RoleDto(BaseModel):
     id: int
     name: str
+    permissions: list[PermissionDto] = []
 
     class Config:
         from_attributes = True

@@ -6,10 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.security.dto.client_dtos import ClientCreateDTO, ClientResponseDTO
-from app.module_users.dtos.user_dtos import UserResponseDto
-from app.security.config.security import get_current_user, require_role
+from app.users.dtos.user_dtos import UserResponseDto
+from app.security.config.security import get_current_user, require_permission
 from app.security.dto.auth_dtos import LoginRequestDto, LoginResponseDto, ProfileUpdateDto
-from app.security.service import auth_service, client_service
+from app.security.service.auth_service import AuthService
+from app.security.service.client_service import ClientService
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -24,11 +25,14 @@ def login(
     db: Session = Depends(get_db)
 ):
     data = LoginRequestDto(username=form.username, password=form.password)
-    return auth_service.login(db, data)
+    return AuthService(db).login(data)
+
+
 @router.post("/register_client", response_model=ClientResponseDTO, status_code=status.HTTP_201_CREATED)
 def create_client(data: ClientCreateDTO, db: Session = Depends(get_db)):
     """Registrar un cliente. Endpoint público (registro)."""
-    return client_service.create_client(db, data)
+    return ClientService(db).create_client(data)
+
 
 @router.get("/me", response_model=UserResponseDto, status_code=status.HTTP_200_OK)
 def me(current_user=Depends(get_current_user)) -> UserResponseDto: # type: ignore
@@ -51,7 +55,7 @@ def update_profile(
     current_user=Depends(get_current_user),
 ):
     """Actualiza el perfil del usuario autenticado."""
-    updated = auth_service.update_profile(db, current_user, data)
+    updated = AuthService(db).update_profile(current_user, data)
     if updated.type == "client":
         return ClientResponseDTO.model_validate(updated)
     return UserResponseDto.model_validate(updated)
@@ -79,7 +83,7 @@ def register_fcm_token(
     status_code=status.HTTP_200_OK,
     summary="Área exclusiva del cliente",
 )
-def client_area(current_user=Depends(require_role("client"))):
+def client_area(current_user=Depends(require_permission("vehicles:create"))):
     return {"message": f"Bienvenido cliente {current_user.username}"}
 
 
@@ -88,7 +92,7 @@ def client_area(current_user=Depends(require_role("client"))):
     status_code=status.HTTP_200_OK,
     summary="Área exclusiva del dueño de taller",
 )
-def workshop_area(current_user=Depends(require_role("workshop_owner"))):
+def workshop_area(current_user=Depends(require_permission("workshops:update"))):
     return {"message": f"Bienvenido dueño de taller {current_user.username}"}
 
 
@@ -97,7 +101,7 @@ def workshop_area(current_user=Depends(require_role("workshop_owner"))):
     status_code=status.HTTP_200_OK,
     summary="Área exclusiva del técnico",
 )
-def technician_area(current_user=Depends(require_role("technician"))):
+def technician_area(current_user=Depends(require_permission("technicians:read"))):
     return {"message": f"Bienvenido técnico {current_user.username}"}
 
 
@@ -106,5 +110,5 @@ def technician_area(current_user=Depends(require_role("technician"))):
     status_code=status.HTTP_200_OK,
     summary="Área exclusiva del administrador",
 )
-def admin_area(current_user=Depends(require_role("admin"))): # type: ignore
+def admin_area(current_user=Depends(require_permission("roles:read"))): # type: ignore
     return {"message": f"Bienvenido administrador {current_user.username}"}

@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
 
-from app.module_users.dtos.user_dtos import UserBase
+from app.users.dtos.user_dtos import UserBase
 
 
 # ── Create / Update ──────────────────────────────────────────────────────────

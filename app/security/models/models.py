@@ -7,10 +7,10 @@ from sqlalchemy import UUID, Boolean, DateTime, Enum, ForeignKey, SmallInteger, 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.module_users.models import User
+from app.users.models import User
 
 if TYPE_CHECKING:
-    from app.module_incidents.models import Rating, Payment
+    from app.incidents.models import Rating, Payment
 
 
 class Client(User):

@@ -28,11 +28,11 @@ if config.config_file_name is not None:
 from app.database import Base
 
 # Import all models so Alembic autogenerate can detect them
-import app.module_users.models  # noqa: F401
+import app.users.models  # noqa: F401
 import app.security.models  # noqa: F401
-import app.module_workshops.models  # noqa: F401
-import app.module_incidents.models  # noqa: F401
-import app.module_workshops.models.report_template  # noqa: F401
+import app.workshops.models  # noqa: F401
+import app.incidents.models  # noqa: F401
+import app.workshops.models.report_template  # noqa: F401
 
 target_metadata = Base.metadata
 

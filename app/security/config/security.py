@@ -38,7 +38,7 @@ def get_current_user(
     token: Annotated[str | None, Depends(oauth2_scheme)],
     db: Session = Depends(get_db),
 ):
-    from app.module_users.repositories.user_repository import get_user_by_username
+    from app.users.repositories.user_repository import UserRepository
 
     if not token:
         raise HTTPException(
@@ -52,7 +52,7 @@ def get_current_user(
     if not username:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido")
 
-    user = get_user_by_username(db, username)
+    user = UserRepository(db).get_by_username(username)
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario no encontrado o inactivo")
 
@@ -71,6 +71,23 @@ def require_role(*role_names: str):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Acceso denegado. Roles requeridos: {list(role_names)}",
+            )
+        return current_user
+    return checker
+
+
+def require_permission(*permission_actions: str):
+    """
+    Dependencia reutilizable para proteger endpoints por permisos específicos.
+    Uso: Depends(require_permission("user:create")) o Depends(require_permission("incident:read", "incident:write"))
+    """
+    def checker(current_user=Depends(get_current_user)):
+        # Obtener los nombres de acciones de permisos asignados al usuario a través de sus roles
+        user_permissions = {p.action for r in current_user.roles for p in r.permissions}
+        if not user_permissions.intersection(permission_actions):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Acceso denegado. Permisos requeridos: {list(permission_actions)}",
             )
         return current_user
     return checker

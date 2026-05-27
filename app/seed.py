@@ -9,10 +9,11 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, Base, engine
-from app.module_users.models.models import Permission, Role, User
+from app.users.models.permission import Permission
+from app.users.models.role import Role
+from app.users.models.user import User
 from app.security.models.models import Client, Vehicle, TransmissionType, FuelType
-from app.module_workshops.models.models import Workshop, Technician, Specialty, WorkshopSpecialty
-from app.module_incidents.models.models import Notification, Incident, IncidentEvidence, WorkshopOffer, Payment, Rating
+from app.workshops.models import Workshop, Technician, Specialty, WorkshopSpecialty
 
 
 def _hash(password: str) -> str:
@@ -52,7 +53,23 @@ PERMISSIONS = [
     {"name": "Ver incidentes",      "action": "incidents:read",    "description": "Permite ver incidentes"},
     {"name": "Editar incidentes",   "action": "incidents:update",  "description": "Permite editar incidentes"},
     {"name": "Eliminar incidentes", "action": "incidents:delete",  "description": "Permite eliminar incidentes"},
+    # Reportes
+    {"name": "Crear reportes",      "action": "reports:create",     "description": "Permite crear reportes"},
+    {"name": "Ver reportes",        "action": "reports:read",       "description": "Permite ver reportes"},
+    {"name": "Editar reportes",     "action": "reports:update",     "description": "Permite editar reportes"},
+    {"name": "Eliminar reportes",   "action": "reports:delete",     "description": "Permite eliminar reportes"},
+    # Técnicos
+    {"name": "Crear técnicos",      "action": "technicians:create", "description": "Permite crear técnicos"},
+    {"name": "Ver técnicos",        "action": "technicians:read",   "description": "Permite ver técnicos"},
+    {"name": "Editar técnicos",     "action": "technicians:update", "description": "Permite editar técnicos"},
+    {"name": "Eliminar técnicos",   "action": "technicians:delete", "description": "Permite eliminar técnicos"},
+    # Especialidades
+    {"name": "Crear especialidades", "action": "specialties:create", "description": "Permite crear especialidades"},
+    {"name": "Ver especialidades",   "action": "specialties:read",   "description": "Permite ver especialidades"},
+    {"name": "Editar especialidades", "action": "specialties:update", "description": "Permite editar especialidades"},
+    {"name": "Eliminar especialidades", "action": "specialties:delete", "description": "Permite eliminar especialidades"},
 ]
+
 
 # ── Roles y sus permisos (por prefijo de action) ────────────────────────────
 
@@ -62,12 +79,15 @@ ROLES = {
         "actions": "*",  # todos los permisos
     },
     "workshop_owner": {
-        "description": "Dueño de taller mecánico",
+        "description": "Dueño de Taller mecánico",
         "actions": [
             "users:read",
             "workshops:create", "workshops:read", "workshops:update",
             "vehicles:read",
             "incidents:read", "incidents:update",
+            "technicians:create", "technicians:read", "technicians:update", "technicians:delete",
+            "specialties:read",
+            "reports:read", "reports:create", "reports:update", "reports:delete",
         ],
     },
     "technician": {
@@ -76,6 +96,7 @@ ROLES = {
             "workshops:read",
             "vehicles:read",
             "incidents:read", "incidents:update",
+            "technicians:read",
         ],
     },
     "client": {
@@ -251,6 +272,12 @@ def run_seed():
     db: Session = SessionLocal()
 
     try:
+        # Limpiar permisos antiguos de reportes en plural para evitar conflictos de constraint único
+        from sqlalchemy import text
+        db.execute(text("DELETE FROM permission_role WHERE permission_id IN (SELECT id FROM permissions WHERE action LIKE 'reports:%')"))
+        db.execute(text("DELETE FROM permissions WHERE action LIKE 'reports:%'"))
+        db.commit()
+
         # 1. Crear permisos
         perm_map: dict[str, Permission] = {}
         for p in PERMISSIONS:

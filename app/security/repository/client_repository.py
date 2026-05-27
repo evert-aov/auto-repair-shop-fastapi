@@ -5,21 +5,24 @@ from sqlalchemy.orm import Session
 from app.security.models import Client
 
 
-def get_all_clients(db: Session) -> list[Client]:
-    return db.query(Client).all()
+class ClientRepository:
+    db: Session
 
+    def __init__(self, db: Session):
+        self.db = db
 
-def get_client_by_id(db: Session, client_id: UUID) -> Client | None:
-    return db.query(Client).filter(Client.id == client_id).first()
+    def get_all(self) -> list[Client]:
+        return self.db.query(Client).all()
 
+    def get_by_id(self, client_id: UUID) -> Client | None:
+        return self.db.query(Client).filter(Client.id == client_id).first()
 
-def save_client(db: Session, client: Client) -> Client:
-    db.add(client)
-    db.commit()
-    db.refresh(client)
-    return client
+    def save(self, client: Client) -> Client:
+        self.db.add(client)
+        self.db.commit()
+        self.db.refresh(client)
+        return client
 
-
-def delete_client(db: Session, client: Client) -> None:
-    db.delete(client)
-    db.commit()
+    def delete(self, client: Client) -> None:
+        self.db.delete(client)
+        self.db.commit()
