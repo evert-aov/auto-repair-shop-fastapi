@@ -9,9 +9,6 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.users.models.role import Role
     from app.notifications.models.notification import Notification
-else:
-    # Import at runtime so SQLAlchemy registry registers the class name 'Notification'
-    import app.notifications.models  # noqa: F401
 
 role_user = Table(
     'role_user', Base.metadata,
@@ -53,3 +50,7 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+
+# Import at runtime so SQLAlchemy registry registers the class name 'Notification'
+import app.notifications.models  # noqa: F401

@@ -2,7 +2,7 @@ import uuid
 from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from app.users.models import User
+from app.users.models.user import User
 
 if TYPE_CHECKING:
     from app.clients.models.vehicle import Vehicle

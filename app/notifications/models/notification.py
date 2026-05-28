@@ -14,8 +14,6 @@ if TYPE_CHECKING:
     from app.users.models.user import User
     from app.incidents.models.incident import Incident
 
-# Import Incident for relationship registration
-
 
 
 class NotificationType(str, enum.Enum):
@@ -51,3 +49,7 @@ class Notification(Base):
 
     incident: Mapped["Incident"] = relationship("Incident", back_populates="notifications")
     user: Mapped["User"] = relationship("User", back_populates="notifications")
+
+
+# Import Incident for relationship registration at runtime
+import app.incidents.models  # noqa: F401
