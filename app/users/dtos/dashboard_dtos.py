@@ -15,6 +15,14 @@ class AdminStats(BaseModel):
     profit_trend_pct: float
     users_trend_pct: float
     ai_trend_pct: float
+    # New metrics
+    avg_assignment_min: float
+    avg_arrival_min: float
+    efficient_workshops: list[dict[str, Any]]
+    incidents_by_zone: list[dict[str, Any]]
+    cancelled_count: int
+    cancelled_pct: float
+    on_time_completed_pct: float
 
 
 class WorkshopStats(BaseModel):
@@ -27,6 +35,15 @@ class WorkshopStats(BaseModel):
     daily_revenue: list[dict[str, Any]]
     emergency_inbox: list[dict[str, Any]]
     technician_locations: list[dict[str, Any]]
+    # New metrics
+    avg_assignment_min: float
+    avg_arrival_min: float
+    incident_distribution: dict[str, int]
+    workshop_rank: int
+    incidents_by_zone: list[dict[str, Any]]
+    cancelled_count: int
+    cancelled_pct: float
+    on_time_completed_pct: float
 
 
 class ClientStats(BaseModel):
