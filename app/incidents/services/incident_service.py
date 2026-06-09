@@ -59,3 +59,59 @@ class IncidentService:
             self.evidence_repository.save(evidence)
 
         return incident
+
+    def cancel_incident(self, incident_id: uuid.UUID, current_user: User) -> Incident:
+        incident = self.incident_repository.get_by_id(incident_id)
+        if not incident:
+            raise HTTPException(status_code=404, detail="Incidente no encontrado")
+
+        from app.clients.models import Client
+        client = self.db.query(Client).filter(Client.id == current_user.id).first()
+        is_owner = client and incident.client_id == client.id
+        is_admin = any(role.name == "admin" for role in current_user.roles)
+        
+        if not is_owner and not is_admin:
+            raise HTTPException(status_code=403, detail="No tienes permiso para cancelar este incidente")
+
+        if incident.status in [IncidentStatus.COMPLETED, IncidentStatus.CANCELLED, IncidentStatus.NO_OFFERS, IncidentStatus.ERROR]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No se puede cancelar el incidente en su estado actual: {incident.status.value}"
+            )
+
+        if incident.status == IncidentStatus.IN_PROGRESS:
+            raise HTTPException(
+                status_code=400,
+                detail="El mecánico ya ha llegado al lugar de asistencia o el servicio ya se encuentra en proceso, no se puede cancelar."
+            )
+
+        prev_status = incident.status.value
+        
+        if incident.assigned_technician_id:
+            from app.workshops.models import Technician
+            tech = self.db.query(Technician).filter(Technician.id == incident.assigned_technician_id).first()
+            if tech:
+                tech.is_available = True
+                logger.info(f"🔓 Técnico {tech.name} liberado tras cancelación")
+
+        from app.incidents.models.workshop_offer import WorkshopOffer, OfferStatus
+        active_offers = self.db.query(WorkshopOffer).filter(
+            WorkshopOffer.incident_id == incident.id,
+            WorkshopOffer.status == OfferStatus.NOTIFIED
+        ).all()
+        for offer in active_offers:
+            offer.status = OfferStatus.EXPIRED
+            self.db.add(offer)
+
+        incident.status = IncidentStatus.CANCELLED
+        self.incident_repository.save(incident)
+
+        from app.incidents.repositories.status_history_repository import StatusHistoryRepository
+        StatusHistoryRepository(self.db).log_status_change(
+            incident_id=incident.id,
+            previous_status=prev_status,
+            new_status=IncidentStatus.CANCELLED.value,
+            reason="Cancelado por el cliente antes del arribo del técnico",
+        )
+
+        return incident
