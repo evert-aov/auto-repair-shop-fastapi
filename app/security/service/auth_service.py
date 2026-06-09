@@ -2,8 +2,9 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.module_users.repositories.user_repository import get_user_by_username
-from app.module_users.services.user_service import verify_password
+from app.users.repositories.user_repository import UserRepository
+from app.users.services.user_service import UserService
+from app.clients.repositories.client_repository import ClientRepository
 from app.security.config.security import create_access_token
 from app.security.dto.auth_dtos import LoginRequestDto, LoginResponseDto, ProfileUpdateDto, RoleDto
 
@@ -23,78 +24,86 @@ REDIRECT_MAP = {
 # Prioridad cuando un usuario tiene varios roles (el de mayor jerarquía manda)
 ROLE_PRIORITY = [ROLE_ADMIN, ROLE_WORKSHOP_OWNER, ROLE_TECHNICIAN, ROLE_CLIENT]
 
-def _resolve_redirect(role_names: set[str]) -> str:
-    """Devuelve la ruta de redirección según el rol de mayor jerarquía."""
-    for role in ROLE_PRIORITY:
-        if role in role_names:
-            return REDIRECT_MAP[role]
-    return "/app/dashboard"
 
-def login(db: Session, data: LoginRequestDto) -> LoginResponseDto:
-    user = get_user_by_username(db, data.username)
+class AuthService:
+    db: Session
 
-    if not user:
-        raise  HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Credenciales incorrectas",
+    def __init__(self, db: Session):
+        self.db = db
+        self.user_repository = UserRepository(db)
+        self.client_repository = ClientRepository(db)
+
+    def _resolve_redirect(self, role_names: set[str]) -> str:
+        """Devuelve la ruta de redirección según el rol de mayor jerarquía."""
+        for role in ROLE_PRIORITY:
+            if role in role_names:
+                return REDIRECT_MAP[role]
+        return "/app/dashboard"
+
+    def login(self, data: LoginRequestDto) -> LoginResponseDto:
+        user = self.user_repository.get_by_username(data.username)
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Credenciales incorrectas",
+            )
+
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cuenta desactivada. Contacta al administrador.",
+            )
+
+        if not UserService.verify_password(data.password, user.password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Credenciales incorrectas",
+            )
+
+        role_names = {r.name for r in user.roles}
+
+        if not role_names:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Usuario sin roles asignados. Contacta al administrador.",
+            )
+
+        # Extract unique permissions from all roles assigned to user
+        permissions_actions = {p.action for r in user.roles for p in r.permissions}
+
+        token = create_access_token(data={
+            "sub": user.username,
+            "user_id": str(user.id),
+            "roles": list(role_names),
+            "permissions": list(permissions_actions),
+        })
+
+        return LoginResponseDto(
+            access_token=token,
+            redirect_to=self._resolve_redirect(role_names),
+            user_id=str(user.id),
+            user_name=user.username,
+            roles=[RoleDto.model_validate(r) for r in user.roles],
         )
 
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cuenta desactivada. Contacta al administrador.",
-        )
+    def update_profile(self, current_user, data: ProfileUpdateDto):
+        if data.name is not None:
+            current_user.name = data.name
+        if data.last_name is not None:
+            current_user.last_name = data.last_name
+        if data.phone is not None:
+            current_user.phone = data.phone
+        if data.password is not None:
+            current_user.password = UserService.hash_password(data.password)
 
-    if not verify_password(data.password, user.password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Credenciales incorrectas",
-        )
+        if current_user.type == "client":
+            if data.address is not None:
+                current_user.address = data.address
+            if data.insurance_provider is not None:
+                current_user.insurance_provider = data.insurance_provider
+            if data.insurance_policy_number is not None:
+                current_user.insurance_policy_number = data.insurance_policy_number
+            return self.client_repository.save(current_user)
 
-    role_names = {r.name for r in user.roles}
-
-    if not role_names:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Usuario sin roles asignados. Contacta al administrador.",
-        )
-
-    token = create_access_token(data={
-        "sub": user.username,
-        "user_id": str(user.id),
-        "roles": list(role_names),
-    })
-
-    return LoginResponseDto(
-        access_token=token,
-        redirect_to=_resolve_redirect(role_names),
-        user_id=str(user.id),
-        user_name=user.username,
-        roles=[RoleDto.model_validate(r) for r in user.roles],
-    )
-
-
-def update_profile(db: Session, current_user, data: ProfileUpdateDto):
-    from app.module_users.services.user_service import get_password_hash
-    from app.security.repository import client_repository
-    from app.module_users.repositories import user_repository
-
-    if data.name is not None:
-        current_user.name = data.name
-    if data.last_name is not None:
-        current_user.last_name = data.last_name
-    if data.phone is not None:
-        current_user.phone = data.phone
-    if data.password is not None:
-        current_user.password = get_password_hash(data.password)
-
-    if current_user.type == "client":
-        if data.address is not None:
-            current_user.address = data.address
-        if data.insurance_provider is not None:
-            current_user.insurance_provider = data.insurance_provider
-        if data.insurance_policy_number is not None:
-            current_user.insurance_policy_number = data.insurance_policy_number
-        return client_repository.save_client(db, current_user)
-
-    return user_repository.save_user(db, current_user)
+        return self.user_repository.update(current_user)

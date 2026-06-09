@@ -13,3 +13,8 @@ dist/
 build/
 .keys/
 *key*.json
+images/
+audios/
+uploads/
+backend.zip
+docs/
