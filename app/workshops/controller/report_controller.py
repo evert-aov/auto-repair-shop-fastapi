@@ -1,10 +1,12 @@
 import io
 import uuid
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.security.config.security import require_permission
@@ -16,12 +18,18 @@ from app.workshops.dtos.report_dtos import (
     ReportTemplateResponse,
     ReportTemplateUpdate,
     ReportTypeDefinition,
+    ScheduledReportCreate,
+    ScheduledReportResponse,
 )
 from app.workshops.repositories.report_repository import (
     CATALOG,
     ReportRepository,
 )
 from app.workshops.services.report_service import ReportService
+from app.workshops.services.report_ai_service import ReportAIService
+from app.incidents.ai.services.storage_service import upload_audio_file
+from app.incidents.ai.services.audio_service import transcribe_audio
+
 
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
 
@@ -49,7 +57,12 @@ def get_catalog(
     result = []
     for key, entry in catalog.items():
         fields = [
-            FieldDefinition(key=k, label=v["label"])
+            FieldDefinition(
+                key=k,
+                label=v["label"],
+                type=v.get("type", "STRING"),
+                options=v.get("options")
+            )
             for k, v in entry["fields"].items()
         ]
         result.append(ReportTypeDefinition(key=key, label=entry["label"], fields=fields))
@@ -205,3 +218,168 @@ def remove_template(
     if tpl.owner_id != current_user.id:
         raise HTTPException(403, "Solo el propietario puede eliminar esta plantilla")
     repo.delete_template(tpl)
+
+
+class PromptReportRequest(BaseModel):
+    prompt: str
+
+
+class AIReportResponse(BaseModel):
+    transcript: Optional[str] = None
+    query: ReportRunRequest
+    result: ReportResult
+
+
+@router.post("/prompt", response_model=AIReportResponse)
+def run_report_by_prompt(
+    req: PromptReportRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission("reports:read", "reports:create", "reports:update", "reports:delete")),
+):
+    run_req = ReportAIService.parse_prompt(req.prompt)
+    if not run_req:
+        raise HTTPException(status_code=400, detail="No se pudo interpretar el prompt del reporte. Intenta ser más específico.")
+
+    roles = _user_roles(current_user)
+    workshop_id = (
+        _get_workshop_id(db, current_user.id) if "workshop_owner" in roles else None
+    )
+
+    entry = CATALOG.get(run_req.report_type)
+    if not entry:
+        raise HTTPException(status_code=400, detail="Tipo de reporte inválido mapeado por la IA.")
+    if not any(r in entry["roles"] for r in roles):
+        raise HTTPException(status_code=403, detail="No tienes acceso al tipo de reporte interpretado.")
+
+    repo = ReportRepository(db)
+    total = repo.count_query(run_req, roles, workshop_id)
+    if run_req.limit is not None:
+        total = min(total, run_req.limit)
+    columns, column_labels, rows = repo.build_and_run_query(run_req, roles, workshop_id)
+
+    result = ReportResult(
+        columns=columns,
+        column_labels=column_labels,
+        rows=rows,
+        total=total,
+        offset=run_req.offset,
+        limit=run_req.limit,
+    )
+
+    return AIReportResponse(query=run_req, result=result)
+
+
+@router.post("/audio", response_model=AIReportResponse)
+def run_report_by_audio(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission("reports:read", "reports:create", "reports:update", "reports:delete")),
+):
+    try:
+        upload_res = upload_audio_file(file)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al procesar el archivo de audio: {str(e)}")
+
+    transcript = transcribe_audio(upload_res.file_url)
+    if not transcript:
+        raise HTTPException(status_code=400, detail="No se pudo transcribir el audio o el audio no contiene voz legible.")
+
+    run_req = ReportAIService.parse_prompt(transcript)
+    if not run_req:
+        raise HTTPException(status_code=400, detail=f"Transcripción: '{transcript}'. No se pudo interpretar como un reporte.")
+
+    roles = _user_roles(current_user)
+    workshop_id = (
+        _get_workshop_id(db, current_user.id) if "workshop_owner" in roles else None
+    )
+
+    entry = CATALOG.get(run_req.report_type)
+    if not entry:
+        raise HTTPException(status_code=400, detail="Tipo de reporte inválido mapeado por la IA.")
+    if not any(r in entry["roles"] for r in roles):
+        raise HTTPException(status_code=403, detail="No tienes acceso al tipo de reporte interpretado.")
+
+    repo = ReportRepository(db)
+    total = repo.count_query(run_req, roles, workshop_id)
+    if run_req.limit is not None:
+        total = min(total, run_req.limit)
+    columns, column_labels, rows = repo.build_and_run_query(run_req, roles, workshop_id)
+
+    result = ReportResult(
+        columns=columns,
+        column_labels=column_labels,
+        rows=rows,
+        total=total,
+        offset=run_req.offset,
+        limit=run_req.limit,
+    )
+
+    return AIReportResponse(transcript=transcript, query=run_req, result=result)
+
+
+@router.get("/templates/{template_id}/schedules", response_model=list[ScheduledReportResponse])
+def list_template_schedules(
+    template_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission("reports:read", "reports:create", "reports:update", "reports:delete")),
+):
+    from app.workshops.models.scheduled_report import ScheduledReport
+    repo = ReportRepository(db)
+    tpl = repo.get_template(template_id, current_user.id)
+    if not tpl:
+        raise HTTPException(404, "Plantilla no encontrada")
+    
+    schedules = db.query(ScheduledReport).filter(ScheduledReport.template_id == template_id).all()
+    return schedules
+
+
+@router.post("/templates/{template_id}/schedules", response_model=ScheduledReportResponse, status_code=201)
+def create_template_schedule(
+    template_id: uuid.UUID,
+    data: ScheduledReportCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission("reports:create", "reports:update", "reports:delete")),
+):
+    from app.workshops.models.scheduled_report import ScheduledReport
+    repo = ReportRepository(db)
+    tpl = repo.get_template(template_id, current_user.id)
+    if not tpl:
+        raise HTTPException(404, "Plantilla no encontrada")
+    if tpl.owner_id != current_user.id:
+        raise HTTPException(403, "Solo el propietario puede programar esta plantilla")
+    
+    sched = ScheduledReport(
+        template_id=template_id,
+        frequency=data.frequency,
+        hour=data.hour,
+        email=data.email,
+        format=data.format,
+        is_active=data.is_active
+    )
+    db.add(sched)
+    db.commit()
+    db.refresh(sched)
+    return sched
+
+
+@router.delete("/schedules/{schedule_id}", status_code=204)
+def remove_schedule(
+    schedule_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user=Depends(require_permission("reports:create", "reports:update", "reports:delete")),
+):
+    from app.workshops.models.scheduled_report import ScheduledReport
+    from app.workshops.models.report_template import ReportTemplate
+    
+    sched = db.query(ScheduledReport).filter(ScheduledReport.id == schedule_id).first()
+    if not sched:
+        raise HTTPException(404, "Programación no encontrada")
+    
+    tpl = db.query(ReportTemplate).filter(ReportTemplate.id == sched.template_id).first()
+    if not tpl or tpl.owner_id != current_user.id:
+        raise HTTPException(403, "No tienes permiso para eliminar esta programación")
+        
+    db.delete(sched)
+    db.commit()
+
+

@@ -29,21 +29,50 @@ CATALOG: dict[str, dict] = {
             "workshop": "LEFT JOIN workshops w ON w.id = i.assigned_workshop_id",
         },
         "fields": {
-            "id": {"label": "ID Incidente", "sql": "CAST(i.id AS TEXT)", "joins": []},
-            "description": {"label": "Descripción", "sql": "i.description", "joins": []},
-            "status": {"label": "Estado", "sql": "CAST(i.status AS TEXT)", "joins": []},
-            "ai_category": {"label": "Categoría IA", "sql": "i.ai_category", "joins": []},
-            "ai_priority": {"label": "Prioridad IA", "sql": "CAST(i.ai_priority AS TEXT)", "joins": []},
-            "created_at": {"label": "Fecha Creación", "sql": "i.created_at", "joins": []},
-            "updated_at": {"label": "Última Actualización", "sql": "i.updated_at", "joins": []},
-            "client_name": {"label": "Cliente", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"]},
-            "client_email": {"label": "Email Cliente", "sql": "u.email", "joins": ["client"]},
+            "id": {"label": "ID Incidente", "sql": "CAST(i.id AS TEXT)", "joins": [], "type": "STRING"},
+            "description": {"label": "Descripción", "sql": "i.description", "joins": [], "type": "STRING"},
+            "status": {
+                "label": "Estado",
+                "sql": "CAST(i.status AS TEXT)",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "pending", "label": "Pendiente"},
+                    {"value": "analyzing", "label": "Analizando"},
+                    {"value": "pending_info", "label": "Pendiente de Información"},
+                    {"value": "matched", "label": "Emparejado"},
+                    {"value": "assigned", "label": "Asignado"},
+                    {"value": "in_progress", "label": "En Progreso"},
+                    {"value": "completed", "label": "Completado"},
+                    {"value": "cancelled", "label": "Cancelado"},
+                    {"value": "no_offers", "label": "Sin Ofertas"},
+                    {"value": "error", "label": "Error"}
+                ]
+            },
+            "ai_category": {"label": "Categoría IA", "sql": "i.ai_category", "joins": [], "type": "STRING"},
+            "ai_priority": {
+                "label": "Prioridad IA",
+                "sql": "CAST(i.ai_priority AS TEXT)",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "LOW", "label": "Baja"},
+                    {"value": "MEDIUM", "label": "Media"},
+                    {"value": "HIGH", "label": "Alta"},
+                    {"value": "CRITICAL", "label": "Crítica"}
+                ]
+            },
+            "created_at": {"label": "Fecha Creación", "sql": "i.created_at", "joins": [], "type": "DATE"},
+            "updated_at": {"label": "Última Actualización", "sql": "i.updated_at", "joins": [], "type": "DATE"},
+            "client_name": {"label": "Cliente", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"], "type": "STRING"},
+            "client_email": {"label": "Email Cliente", "sql": "u.email", "joins": ["client"], "type": "STRING"},
             "vehicle_info": {
                 "label": "Vehículo",
                 "sql": "CONCAT(COALESCE(v.make,''), ' ', COALESCE(v.model,''), ' - ', COALESCE(v.license_plate,''))",
                 "joins": ["vehicle"],
+                "type": "STRING"
             },
-            "workshop_name": {"label": "Taller Asignado", "sql": "w.name", "joins": ["workshop"]},
+            "workshop_name": {"label": "Taller Asignado", "sql": "w.name", "joins": ["workshop"], "type": "STRING"},
         },
     },
     "payments": {
@@ -58,18 +87,59 @@ CATALOG: dict[str, dict] = {
             "incident": "LEFT JOIN incidents i ON i.id = p.incident_id",
         },
         "fields": {
-            "id": {"label": "ID Pago", "sql": "CAST(p.id AS TEXT)", "joins": []},
-            "gross_amount": {"label": "Monto Bruto", "sql": "p.gross_amount", "joins": []},
-            "commission_amount": {"label": "Comisión", "sql": "p.commission_amount", "joins": []},
-            "net_amount": {"label": "Monto Neto", "sql": "p.net_amount", "joins": []},
-            "payment_method": {"label": "Método de Pago", "sql": "CAST(p.payment_method AS TEXT)", "joins": []},
-            "status": {"label": "Estado Pago", "sql": "CAST(p.status AS TEXT)", "joins": []},
-            "currency": {"label": "Moneda", "sql": "p.currency", "joins": []},
-            "paid_at": {"label": "Fecha de Pago", "sql": "p.paid_at", "joins": []},
-            "created_at": {"label": "Fecha Creación", "sql": "p.created_at", "joins": []},
-            "client_name": {"label": "Cliente", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"]},
-            "workshop_name": {"label": "Taller", "sql": "w.name", "joins": ["workshop"]},
-            "incident_status": {"label": "Estado Incidente", "sql": "CAST(i.status AS TEXT)", "joins": ["incident"]},
+            "id": {"label": "ID Pago", "sql": "CAST(p.id AS TEXT)", "joins": [], "type": "STRING"},
+            "gross_amount": {"label": "Monto Bruto", "sql": "p.gross_amount", "joins": [], "type": "NUMBER"},
+            "commission_amount": {"label": "Comisión", "sql": "p.commission_amount", "joins": [], "type": "NUMBER"},
+            "net_amount": {"label": "Monto Neto", "sql": "p.net_amount", "joins": [], "type": "NUMBER"},
+            "payment_method": {
+                "label": "Método de Pago",
+                "sql": "CAST(p.payment_method AS TEXT)",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "qr", "label": "QR"},
+                    {"value": "card", "label": "Tarjeta"},
+                    {"value": "cash", "label": "Efectivo"},
+                    {"value": "transfer", "label": "Transferencia"},
+                    {"value": "paypal", "label": "PayPal"}
+                ]
+            },
+            "status": {
+                "label": "Estado Pago",
+                "sql": "CAST(p.status AS TEXT)",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "pending", "label": "Pendiente"},
+                    {"value": "processing", "label": "Procesando"},
+                    {"value": "completed", "label": "Completado"},
+                    {"value": "failed", "label": "Fallido"},
+                    {"value": "refunded", "label": "Reembolsado"}
+                ]
+            },
+            "currency": {"label": "Moneda", "sql": "p.currency", "joins": [], "type": "STRING"},
+            "paid_at": {"label": "Fecha de Pago", "sql": "p.paid_at", "joins": [], "type": "DATE"},
+            "created_at": {"label": "Fecha Creación", "sql": "p.created_at", "joins": [], "type": "DATE"},
+            "client_name": {"label": "Cliente", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"], "type": "STRING"},
+            "workshop_name": {"label": "Taller", "sql": "w.name", "joins": ["workshop"], "type": "STRING"},
+            "incident_status": {
+                "label": "Estado Incidente",
+                "sql": "CAST(i.status AS TEXT)",
+                "joins": ["incident"],
+                "type": "ENUM",
+                "options": [
+                    {"value": "pending", "label": "Pendiente"},
+                    {"value": "analyzing", "label": "Analizando"},
+                    {"value": "pending_info", "label": "Pendiente de Información"},
+                    {"value": "matched", "label": "Emparejado"},
+                    {"value": "assigned", "label": "Asignado"},
+                    {"value": "in_progress", "label": "En Progreso"},
+                    {"value": "completed", "label": "Completado"},
+                    {"value": "cancelled", "label": "Cancelado"},
+                    {"value": "no_offers", "label": "Sin Ofertas"},
+                    {"value": "error", "label": "Error"}
+                ]
+            },
         },
     },
     "ratings": {
@@ -84,15 +154,15 @@ CATALOG: dict[str, dict] = {
             "incident": "LEFT JOIN incidents i ON i.id = r.incident_id",
         },
         "fields": {
-            "id": {"label": "ID Calificación", "sql": "CAST(r.id AS TEXT)", "joins": []},
-            "score": {"label": "Puntuación General", "sql": "r.score", "joins": []},
-            "response_time_score": {"label": "Tiempo de Respuesta", "sql": "r.response_time_score", "joins": []},
-            "quality_score": {"label": "Calidad del Servicio", "sql": "r.quality_score", "joins": []},
-            "comment": {"label": "Comentario", "sql": "r.comment", "joins": []},
-            "created_at": {"label": "Fecha", "sql": "r.created_at", "joins": []},
-            "client_name": {"label": "Cliente", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"]},
-            "workshop_name": {"label": "Taller", "sql": "w.name", "joins": ["workshop"]},
-            "incident_category": {"label": "Categoría Incidente", "sql": "i.ai_category", "joins": ["incident"]},
+            "id": {"label": "ID Calificación", "sql": "CAST(r.id AS TEXT)", "joins": [], "type": "STRING"},
+            "score": {"label": "Puntuación General", "sql": "r.score", "joins": [], "type": "NUMBER"},
+            "response_time_score": {"label": "Tiempo de Respuesta", "sql": "r.response_time_score", "joins": [], "type": "NUMBER"},
+            "quality_score": {"label": "Calidad del Servicio", "sql": "r.quality_score", "joins": [], "type": "NUMBER"},
+            "comment": {"label": "Comentario", "sql": "r.comment", "joins": [], "type": "STRING"},
+            "created_at": {"label": "Fecha", "sql": "r.created_at", "joins": [], "type": "DATE"},
+            "client_name": {"label": "Cliente", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"], "type": "STRING"},
+            "workshop_name": {"label": "Taller", "sql": "w.name", "joins": ["workshop"], "type": "STRING"},
+            "incident_category": {"label": "Categoría Incidente", "sql": "i.ai_category", "joins": ["incident"], "type": "STRING"},
         },
     },
     "workshops": {
@@ -105,19 +175,19 @@ CATALOG: dict[str, dict] = {
             "owner": "LEFT JOIN users ow ON ow.id = ws.owner_user_id",
         },
         "fields": {
-            "id": {"label": "ID Taller", "sql": "CAST(ws.id AS TEXT)", "joins": []},
-            "name": {"label": "Nombre", "sql": "ws.name", "joins": []},
-            "business_name": {"label": "Razón Social", "sql": "ws.business_name", "joins": []},
-            "address": {"label": "Dirección", "sql": "ws.address", "joins": []},
-            "phone": {"label": "Teléfono", "sql": "ws.phone", "joins": []},
-            "commission_rate": {"label": "Tasa Comisión %", "sql": "ws.commission_rate", "joins": []},
-            "rating_avg": {"label": "Calificación Promedio", "sql": "ws.rating_avg", "joins": []},
-            "total_services": {"label": "Total Servicios", "sql": "ws.total_services", "joins": []},
-            "is_active": {"label": "Activo", "sql": "ws.is_active", "joins": []},
-            "is_verified": {"label": "Verificado", "sql": "ws.is_verified", "joins": []},
-            "created_at": {"label": "Fecha Registro", "sql": "ws.created_at", "joins": []},
-            "owner_name": {"label": "Propietario", "sql": "CONCAT(ow.name, ' ', ow.last_name)", "joins": ["owner"]},
-            "owner_email": {"label": "Email Propietario", "sql": "ow.email", "joins": ["owner"]},
+            "id": {"label": "ID Taller", "sql": "CAST(ws.id AS TEXT)", "joins": [], "type": "STRING"},
+            "name": {"label": "Nombre", "sql": "ws.name", "joins": [], "type": "STRING"},
+            "business_name": {"label": "Razón Social", "sql": "ws.business_name", "joins": [], "type": "STRING"},
+            "address": {"label": "Dirección", "sql": "ws.address", "joins": [], "type": "STRING"},
+            "phone": {"label": "Teléfono", "sql": "ws.phone", "joins": [], "type": "STRING"},
+            "commission_rate": {"label": "Tasa Comisión %", "sql": "ws.commission_rate", "joins": [], "type": "NUMBER"},
+            "rating_avg": {"label": "Calificación Promedio", "sql": "ws.rating_avg", "joins": [], "type": "NUMBER"},
+            "total_services": {"label": "Total Servicios", "sql": "ws.total_services", "joins": [], "type": "NUMBER"},
+            "is_active": {"label": "Activo", "sql": "ws.is_active", "joins": [], "type": "BOOLEAN"},
+            "is_verified": {"label": "Verificado", "sql": "ws.is_verified", "joins": [], "type": "BOOLEAN"},
+            "created_at": {"label": "Fecha Registro", "sql": "ws.created_at", "joins": [], "type": "DATE"},
+            "owner_name": {"label": "Propietario", "sql": "CONCAT(ow.name, ' ', ow.last_name)", "joins": ["owner"], "type": "STRING"},
+            "owner_email": {"label": "Email Propietario", "sql": "ow.email", "joins": ["owner"], "type": "STRING"},
         },
     },
     "users": {
@@ -128,15 +198,26 @@ CATALOG: dict[str, dict] = {
         "workshop_filter": None,
         "joins_available": {},
         "fields": {
-            "id": {"label": "ID", "sql": "CAST(us.id AS TEXT)", "joins": []},
-            "username": {"label": "Usuario", "sql": "us.username", "joins": []},
-            "name": {"label": "Nombre", "sql": "us.name", "joins": []},
-            "last_name": {"label": "Apellido", "sql": "us.last_name", "joins": []},
-            "email": {"label": "Email", "sql": "us.email", "joins": []},
-            "phone": {"label": "Teléfono", "sql": "us.phone", "joins": []},
-            "type": {"label": "Tipo", "sql": "us.type", "joins": []},
-            "is_active": {"label": "Activo", "sql": "us.is_active", "joins": []},
-            "created_at": {"label": "Fecha Registro", "sql": "us.created_at", "joins": []},
+            "id": {"label": "ID", "sql": "CAST(us.id AS TEXT)", "joins": [], "type": "STRING"},
+            "username": {"label": "Usuario", "sql": "us.username", "joins": [], "type": "STRING"},
+            "name": {"label": "Nombre", "sql": "us.name", "joins": [], "type": "STRING"},
+            "last_name": {"label": "Apellido", "sql": "us.last_name", "joins": [], "type": "STRING"},
+            "email": {"label": "Email", "sql": "us.email", "joins": [], "type": "STRING"},
+            "phone": {"label": "Teléfono", "sql": "us.phone", "joins": [], "type": "STRING"},
+            "type": {
+                "label": "Tipo",
+                "sql": "us.type",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "admin", "label": "Administrador"},
+                    {"value": "client", "label": "Cliente"},
+                    {"value": "workshop_owner", "label": "Dueño de Taller"},
+                    {"value": "technician", "label": "Técnico"}
+                ]
+            },
+            "is_active": {"label": "Activo", "sql": "us.is_active", "joins": [], "type": "BOOLEAN"},
+            "created_at": {"label": "Fecha Registro", "sql": "us.created_at", "joins": [], "type": "DATE"},
         },
     },
     "clients": {
@@ -147,18 +228,18 @@ CATALOG: dict[str, dict] = {
         "workshop_filter": None,
         "joins_available": {},
         "fields": {
-            "id": {"label": "ID", "sql": "CAST(c.id AS TEXT)", "joins": []},
-            "name": {"label": "Nombre", "sql": "u.name", "joins": []},
-            "last_name": {"label": "Apellido", "sql": "u.last_name", "joins": []},
-            "email": {"label": "Email", "sql": "u.email", "joins": []},
-            "phone": {"label": "Teléfono", "sql": "u.phone", "joins": []},
-            "username": {"label": "Usuario", "sql": "u.username", "joins": []},
-            "address": {"label": "Dirección", "sql": "c.address", "joins": []},
-            "insurance_provider": {"label": "Aseguradora", "sql": "c.insurance_provider", "joins": []},
-            "insurance_policy": {"label": "N° Póliza", "sql": "c.insurance_policy_number", "joins": []},
-            "total_request": {"label": "Total Solicitudes", "sql": "c.total_request", "joins": []},
-            "is_active": {"label": "Activo", "sql": "u.is_active", "joins": []},
-            "created_at": {"label": "Fecha Registro", "sql": "u.created_at", "joins": []},
+            "id": {"label": "ID", "sql": "CAST(c.id AS TEXT)", "joins": [], "type": "STRING"},
+            "name": {"label": "Nombre", "sql": "u.name", "joins": [], "type": "STRING"},
+            "last_name": {"label": "Apellido", "sql": "u.last_name", "joins": [], "type": "STRING"},
+            "email": {"label": "Email", "sql": "u.email", "joins": [], "type": "STRING"},
+            "phone": {"label": "Teléfono", "sql": "u.phone", "joins": [], "type": "STRING"},
+            "username": {"label": "Usuario", "sql": "u.username", "joins": [], "type": "STRING"},
+            "address": {"label": "Dirección", "sql": "c.address", "joins": [], "type": "STRING"},
+            "insurance_provider": {"label": "Aseguradora", "sql": "c.insurance_provider", "joins": [], "type": "STRING"},
+            "insurance_policy": {"label": "N° Póliza", "sql": "c.insurance_policy_number", "joins": [], "type": "STRING"},
+            "total_request": {"label": "Total Solicitudes", "sql": "c.total_request", "joins": [], "type": "NUMBER"},
+            "is_active": {"label": "Activo", "sql": "u.is_active", "joins": [], "type": "BOOLEAN"},
+            "created_at": {"label": "Fecha Registro", "sql": "u.created_at", "joins": [], "type": "DATE"},
         },
     },
     "vehicles": {
@@ -171,19 +252,39 @@ CATALOG: dict[str, dict] = {
             "client": "LEFT JOIN clients c ON c.id = v.client_id LEFT JOIN users u ON u.id = c.id",
         },
         "fields": {
-            "id": {"label": "ID", "sql": "CAST(v.id AS TEXT)", "joins": []},
-            "make": {"label": "Marca", "sql": "v.make", "joins": []},
-            "model": {"label": "Modelo", "sql": "v.model", "joins": []},
-            "year": {"label": "Año", "sql": "v.year", "joins": []},
-            "license_plate": {"label": "Placa", "sql": "v.license_plate", "joins": []},
-            "color": {"label": "Color", "sql": "v.color", "joins": []},
-            "transmission_type": {"label": "Transmisión", "sql": "CAST(v.transmission_type AS TEXT)", "joins": []},
-            "fuel_type": {"label": "Combustible", "sql": "CAST(v.fuel_type AS TEXT)", "joins": []},
-            "vin": {"label": "VIN", "sql": "v.vin", "joins": []},
-            "is_active": {"label": "Activo", "sql": "v.is_active", "joins": []},
-            "created_at": {"label": "Fecha Registro", "sql": "v.created_at", "joins": []},
-            "client_name": {"label": "Propietario", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"]},
-            "client_email": {"label": "Email Propietario", "sql": "u.email", "joins": ["client"]},
+            "id": {"label": "ID", "sql": "CAST(v.id AS TEXT)", "joins": [], "type": "STRING"},
+            "make": {"label": "Marca", "sql": "v.make", "joins": [], "type": "STRING"},
+            "model": {"label": "Modelo", "sql": "v.model", "joins": [], "type": "STRING"},
+            "year": {"label": "Año", "sql": "v.year", "joins": [], "type": "NUMBER"},
+            "license_plate": {"label": "Placa", "sql": "v.license_plate", "joins": [], "type": "STRING"},
+            "color": {"label": "Color", "sql": "v.color", "joins": [], "type": "STRING"},
+            "transmission_type": {
+                "label": "Transmisión",
+                "sql": "CAST(v.transmission_type AS TEXT)",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "manual", "label": "Manual"},
+                    {"value": "automatic", "label": "Automático"}
+                ]
+            },
+            "fuel_type": {
+                "label": "Combustible",
+                "sql": "CAST(v.fuel_type AS TEXT)",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "gasoline", "label": "Gasolina"},
+                    {"value": "diesel", "label": "Diésel"},
+                    {"value": "electric", "label": "Eléctrico"},
+                    {"value": "hybrid", "label": "Híbrido"}
+                ]
+            },
+            "vin": {"label": "VIN", "sql": "v.vin", "joins": [], "type": "STRING"},
+            "is_active": {"label": "Activo", "sql": "v.is_active", "joins": [], "type": "BOOLEAN"},
+            "created_at": {"label": "Fecha Registro", "sql": "v.created_at", "joins": [], "type": "DATE"},
+            "client_name": {"label": "Propietario", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"], "type": "STRING"},
+            "client_email": {"label": "Email Propietario", "sql": "u.email", "joins": ["client"], "type": "STRING"},
         },
     },
     "technicians": {
@@ -196,19 +297,19 @@ CATALOG: dict[str, dict] = {
             "workshop": "LEFT JOIN workshops w ON w.id = t.workshop_id",
         },
         "fields": {
-            "id": {"label": "ID", "sql": "CAST(t.id AS TEXT)", "joins": []},
-            "name": {"label": "Nombre", "sql": "u.name", "joins": []},
-            "last_name": {"label": "Apellido", "sql": "u.last_name", "joins": []},
-            "email": {"label": "Email", "sql": "u.email", "joins": []},
-            "phone": {"label": "Teléfono", "sql": "u.phone", "joins": []},
-            "username": {"label": "Usuario", "sql": "u.username", "joins": []},
-            "is_available": {"label": "Disponible", "sql": "t.is_available", "joins": []},
-            "is_active": {"label": "Activo", "sql": "u.is_active", "joins": []},
-            "current_latitude": {"label": "Latitud Actual", "sql": "CAST(t.current_latitude AS TEXT)", "joins": []},
-            "current_longitude": {"label": "Longitud Actual", "sql": "CAST(t.current_longitude AS TEXT)", "joins": []},
-            "created_at": {"label": "Fecha Registro", "sql": "u.created_at", "joins": []},
-            "workshop_name": {"label": "Taller", "sql": "w.name", "joins": ["workshop"]},
-            "workshop_address": {"label": "Dirección Taller", "sql": "w.address", "joins": ["workshop"]},
+            "id": {"label": "ID", "sql": "CAST(t.id AS TEXT)", "joins": [], "type": "STRING"},
+            "name": {"label": "Nombre", "sql": "u.name", "joins": [], "type": "STRING"},
+            "last_name": {"label": "Apellido", "sql": "u.last_name", "joins": [], "type": "STRING"},
+            "email": {"label": "Email", "sql": "u.email", "joins": [], "type": "STRING"},
+            "phone": {"label": "Teléfono", "sql": "u.phone", "joins": [], "type": "STRING"},
+            "username": {"label": "Usuario", "sql": "u.username", "joins": [], "type": "STRING"},
+            "is_available": {"label": "Disponible", "sql": "t.is_available", "joins": [], "type": "BOOLEAN"},
+            "is_active": {"label": "Activo", "sql": "u.is_active", "joins": [], "type": "BOOLEAN"},
+            "current_latitude": {"label": "Latitud Actual", "sql": "CAST(t.current_latitude AS TEXT)", "joins": [], "type": "STRING"},
+            "current_longitude": {"label": "Longitud Actual", "sql": "CAST(t.current_longitude AS TEXT)", "joins": [], "type": "STRING"},
+            "created_at": {"label": "Fecha Registro", "sql": "u.created_at", "joins": [], "type": "DATE"},
+            "workshop_name": {"label": "Taller", "sql": "w.name", "joins": ["workshop"], "type": "STRING"},
+            "workshop_address": {"label": "Dirección Taller", "sql": "w.address", "joins": ["workshop"], "type": "STRING"},
         },
     },
     "workshop_offers": {
@@ -222,20 +323,62 @@ CATALOG: dict[str, dict] = {
             "incident": "LEFT JOIN incidents i ON i.id = wo.incident_id",
         },
         "fields": {
-            "id": {"label": "ID Oferta", "sql": "CAST(wo.id AS TEXT)", "joins": []},
-            "status": {"label": "Estado", "sql": "CAST(wo.status AS TEXT)", "joins": []},
-            "distance_km": {"label": "Distancia (km)", "sql": "wo.distance_km", "joins": []},
-            "ai_score": {"label": "Puntuación IA", "sql": "wo.ai_score", "joins": []},
-            "timeout_minutes": {"label": "Tiempo Límite (min)", "sql": "wo.timeout_minutes", "joins": []},
-            "rejection_reason": {"label": "Motivo Rechazo", "sql": "wo.rejection_reason", "joins": []},
-            "notified_at": {"label": "Fecha Notificación", "sql": "wo.notified_at", "joins": []},
-            "accepted_at": {"label": "Fecha Aceptación", "sql": "wo.accepted_at", "joins": []},
-            "rejected_at": {"label": "Fecha Rechazo", "sql": "wo.rejected_at", "joins": []},
-            "expires_at": {"label": "Fecha Expiración", "sql": "wo.expires_at", "joins": []},
-            "created_at": {"label": "Fecha Creación", "sql": "wo.created_at", "joins": []},
-            "workshop_name": {"label": "Taller", "sql": "w.name", "joins": ["workshop"]},
-            "incident_status": {"label": "Estado Incidente", "sql": "CAST(i.status AS TEXT)", "joins": ["incident"]},
-            "incident_category": {"label": "Categoría Incidente", "sql": "i.ai_category", "joins": ["incident"]},
+            "id": {"label": "ID Oferta", "sql": "CAST(wo.id AS TEXT)", "joins": [], "type": "STRING"},
+            "status": {
+                "label": "Estado",
+                "sql": "CAST(wo.status AS TEXT)",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "notified", "label": "Notificado"},
+                    {"value": "accepted", "label": "Aceptado"},
+                    {"value": "rejected", "label": "Rechazado"},
+                    {"value": "timeout", "label": "Tiempo Agotado"},
+                    {"value": "expired", "label": "Expirado"}
+                ]
+            },
+            "distance_km": {"label": "Distancia (km)", "sql": "wo.distance_km", "joins": [], "type": "NUMBER"},
+            "ai_score": {"label": "Puntuación IA", "sql": "wo.ai_score", "joins": [], "type": "NUMBER"},
+            "timeout_minutes": {"label": "Tiempo Límite (min)", "sql": "wo.timeout_minutes", "joins": [], "type": "NUMBER"},
+            "rejection_reason": {
+                "label": "Motivo Rechazo",
+                "sql": "wo.rejection_reason",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "no_reason", "label": "Sin Motivo"},
+                    {"value": "busy", "label": "Ocupado"},
+                    {"value": "far_from_zone", "label": "Lejos de la Zona"},
+                    {"value": "no_parts", "label": "Sin Repuestos"},
+                    {"value": "no_technician", "label": "Sin Técnicos"},
+                    {"value": "timeout_no_response", "label": "Sin Respuesta"}
+                ]
+            },
+            "notified_at": {"label": "Fecha Notificación", "sql": "wo.notified_at", "joins": [], "type": "DATE"},
+            "accepted_at": {"label": "Fecha Aceptación", "sql": "wo.accepted_at", "joins": [], "type": "DATE"},
+            "rejected_at": {"label": "Fecha Rechazo", "sql": "wo.rejected_at", "joins": [], "type": "DATE"},
+            "expires_at": {"label": "Fecha Expiración", "sql": "wo.expires_at", "joins": [], "type": "DATE"},
+            "created_at": {"label": "Fecha Creación", "sql": "wo.created_at", "joins": [], "type": "DATE"},
+            "workshop_name": {"label": "Taller", "sql": "w.name", "joins": ["workshop"], "type": "STRING"},
+            "incident_status": {
+                "label": "Estado Incidente",
+                "sql": "CAST(i.status AS TEXT)",
+                "joins": ["incident"],
+                "type": "ENUM",
+                "options": [
+                    {"value": "pending", "label": "Pendiente"},
+                    {"value": "analyzing", "label": "Analizando"},
+                    {"value": "pending_info", "label": "Pendiente de Información"},
+                    {"value": "matched", "label": "Emparejado"},
+                    {"value": "assigned", "label": "Asignado"},
+                    {"value": "in_progress", "label": "En Progreso"},
+                    {"value": "completed", "label": "Completado"},
+                    {"value": "cancelled", "label": "Cancelado"},
+                    {"value": "no_offers", "label": "Sin Ofertas"},
+                    {"value": "error", "label": "Error"}
+                ]
+            },
+            "incident_category": {"label": "Categoría Incidente", "sql": "i.ai_category", "joins": ["incident"], "type": "STRING"},
         },
     },
     "notifications": {
@@ -248,15 +391,29 @@ CATALOG: dict[str, dict] = {
             "user": "LEFT JOIN users u ON u.id = n.user_id",
         },
         "fields": {
-            "id": {"label": "ID", "sql": "CAST(n.id AS TEXT)", "joins": []},
-            "type": {"label": "Tipo", "sql": "CAST(n.type AS TEXT)", "joins": []},
-            "title": {"label": "Título", "sql": "n.title", "joins": []},
-            "body": {"label": "Mensaje", "sql": "n.body", "joins": []},
-            "is_read": {"label": "Leída", "sql": "n.is_read", "joins": []},
-            "sent_at": {"label": "Fecha Envío", "sql": "n.sent_at", "joins": []},
-            "read_at": {"label": "Fecha Lectura", "sql": "n.read_at", "joins": []},
-            "user_name": {"label": "Destinatario", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["user"]},
-            "user_email": {"label": "Email Destinatario", "sql": "u.email", "joins": ["user"]},
+            "id": {"label": "ID", "sql": "CAST(n.id AS TEXT)", "joins": [], "type": "STRING"},
+            "type": {
+                "label": "Tipo",
+                "sql": "CAST(n.type AS TEXT)",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "new_request", "label": "Nueva Solicitud"},
+                    {"value": "accepted", "label": "Aceptada"},
+                    {"value": "rejected", "label": "Rechazada"},
+                    {"value": "status_update", "label": "Actualización de Estado"},
+                    {"value": "payment", "label": "Pago"},
+                    {"value": "system", "label": "Sistema"},
+                    {"value": "service_completed", "label": "Servicio Completado"}
+                ]
+            },
+            "title": {"label": "Título", "sql": "n.title", "joins": [], "type": "STRING"},
+            "body": {"label": "Mensaje", "sql": "n.body", "joins": [], "type": "STRING"},
+            "is_read": {"label": "Leída", "sql": "n.is_read", "joins": [], "type": "BOOLEAN"},
+            "sent_at": {"label": "Fecha Envío", "sql": "n.sent_at", "joins": [], "type": "DATE"},
+            "read_at": {"label": "Fecha Lectura", "sql": "n.read_at", "joins": [], "type": "DATE"},
+            "user_name": {"label": "Destinatario", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["user"], "type": "STRING"},
+            "user_email": {"label": "Email Destinatario", "sql": "u.email", "joins": ["user"], "type": "STRING"},
         },
     },
     # Workshop owner reports
@@ -271,19 +428,48 @@ CATALOG: dict[str, dict] = {
             "vehicle": "LEFT JOIN vehicles v ON v.id = i.vehicle_id",
         },
         "fields": {
-            "id": {"label": "ID Incidente", "sql": "CAST(i.id AS TEXT)", "joins": []},
-            "description": {"label": "Descripción", "sql": "i.description", "joins": []},
-            "status": {"label": "Estado", "sql": "CAST(i.status AS TEXT)", "joins": []},
-            "ai_category": {"label": "Categoría", "sql": "i.ai_category", "joins": []},
-            "ai_priority": {"label": "Prioridad", "sql": "CAST(i.ai_priority AS TEXT)", "joins": []},
-            "created_at": {"label": "Fecha Creación", "sql": "i.created_at", "joins": []},
-            "updated_at": {"label": "Última Actualización", "sql": "i.updated_at", "joins": []},
-            "client_name": {"label": "Cliente", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"]},
-            "client_email": {"label": "Email Cliente", "sql": "u.email", "joins": ["client"]},
+            "id": {"label": "ID Incidente", "sql": "CAST(i.id AS TEXT)", "joins": [], "type": "STRING"},
+            "description": {"label": "Descripción", "sql": "i.description", "joins": [], "type": "STRING"},
+            "status": {
+                "label": "Estado",
+                "sql": "CAST(i.status AS TEXT)",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "pending", "label": "Pendiente"},
+                    {"value": "analyzing", "label": "Analizando"},
+                    {"value": "pending_info", "label": "Pendiente de Información"},
+                    {"value": "matched", "label": "Emparejado"},
+                    {"value": "assigned", "label": "Asignado"},
+                    {"value": "in_progress", "label": "En Progreso"},
+                    {"value": "completed", "label": "Completado"},
+                    {"value": "cancelled", "label": "Cancelado"},
+                    {"value": "no_offers", "label": "Sin Ofertas"},
+                    {"value": "error", "label": "Error"}
+                ]
+            },
+            "ai_category": {"label": "Categoría", "sql": "i.ai_category", "joins": [], "type": "STRING"},
+            "ai_priority": {
+                "label": "Prioridad",
+                "sql": "CAST(i.ai_priority AS TEXT)",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "LOW", "label": "Baja"},
+                    {"value": "MEDIUM", "label": "Media"},
+                    {"value": "HIGH", "label": "Alta"},
+                    {"value": "CRITICAL", "label": "Crítica"}
+                ]
+            },
+            "created_at": {"label": "Fecha Creación", "sql": "i.created_at", "joins": [], "type": "DATE"},
+            "updated_at": {"label": "Última Actualización", "sql": "i.updated_at", "joins": [], "type": "DATE"},
+            "client_name": {"label": "Cliente", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"], "type": "STRING"},
+            "client_email": {"label": "Email Cliente", "sql": "u.email", "joins": ["client"], "type": "STRING"},
             "vehicle_info": {
                 "label": "Vehículo",
                 "sql": "CONCAT(COALESCE(v.make,''), ' ', COALESCE(v.model,''))",
                 "joins": ["vehicle"],
+                "type": "STRING"
             },
         },
     },
@@ -298,15 +484,39 @@ CATALOG: dict[str, dict] = {
             "incident": "LEFT JOIN incidents i ON i.id = p.incident_id",
         },
         "fields": {
-            "id": {"label": "ID Pago", "sql": "CAST(p.id AS TEXT)", "joins": []},
-            "gross_amount": {"label": "Monto Bruto", "sql": "p.gross_amount", "joins": []},
-            "commission_amount": {"label": "Comisión", "sql": "p.commission_amount", "joins": []},
-            "net_amount": {"label": "Monto Neto", "sql": "p.net_amount", "joins": []},
-            "payment_method": {"label": "Método de Pago", "sql": "CAST(p.payment_method AS TEXT)", "joins": []},
-            "status": {"label": "Estado", "sql": "CAST(p.status AS TEXT)", "joins": []},
-            "paid_at": {"label": "Fecha de Pago", "sql": "p.paid_at", "joins": []},
-            "created_at": {"label": "Fecha Creación", "sql": "p.created_at", "joins": []},
-            "client_name": {"label": "Cliente", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"]},
+            "id": {"label": "ID Pago", "sql": "CAST(p.id AS TEXT)", "joins": [], "type": "STRING"},
+            "gross_amount": {"label": "Monto Bruto", "sql": "p.gross_amount", "joins": [], "type": "NUMBER"},
+            "commission_amount": {"label": "Comisión", "sql": "p.commission_amount", "joins": [], "type": "NUMBER"},
+            "net_amount": {"label": "Monto Neto", "sql": "p.net_amount", "joins": [], "type": "NUMBER"},
+            "payment_method": {
+                "label": "Método de Pago",
+                "sql": "CAST(p.payment_method AS TEXT)",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "qr", "label": "QR"},
+                    {"value": "card", "label": "Tarjeta"},
+                    {"value": "cash", "label": "Efectivo"},
+                    {"value": "transfer", "label": "Transferencia"},
+                    {"value": "paypal", "label": "PayPal"}
+                ]
+            },
+            "status": {
+                "label": "Estado",
+                "sql": "CAST(p.status AS TEXT)",
+                "joins": [],
+                "type": "ENUM",
+                "options": [
+                    {"value": "pending", "label": "Pendiente"},
+                    {"value": "processing", "label": "Procesando"},
+                    {"value": "completed", "label": "Completado"},
+                    {"value": "failed", "label": "Fallido"},
+                    {"value": "refunded", "label": "Reembolsado"}
+                ]
+            },
+            "paid_at": {"label": "Fecha de Pago", "sql": "p.paid_at", "joins": [], "type": "DATE"},
+            "created_at": {"label": "Fecha Creación", "sql": "p.created_at", "joins": [], "type": "DATE"},
+            "client_name": {"label": "Cliente", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"], "type": "STRING"},
         },
     },
     "my_ratings": {
@@ -320,13 +530,13 @@ CATALOG: dict[str, dict] = {
             "incident": "LEFT JOIN incidents i ON i.id = r.incident_id",
         },
         "fields": {
-            "id": {"label": "ID", "sql": "CAST(r.id AS TEXT)", "joins": []},
-            "score": {"label": "Puntuación", "sql": "r.score", "joins": []},
-            "response_time_score": {"label": "Tiempo de Respuesta", "sql": "r.response_time_score", "joins": []},
-            "quality_score": {"label": "Calidad", "sql": "r.quality_score", "joins": []},
-            "comment": {"label": "Comentario", "sql": "r.comment", "joins": []},
-            "created_at": {"label": "Fecha", "sql": "r.created_at", "joins": []},
-            "client_name": {"label": "Cliente", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"]},
+            "id": {"label": "ID", "sql": "CAST(r.id AS TEXT)", "joins": [], "type": "STRING"},
+            "score": {"label": "Puntuación", "sql": "r.score", "joins": [], "type": "NUMBER"},
+            "response_time_score": {"label": "Tiempo de Respuesta", "sql": "r.response_time_score", "joins": [], "type": "NUMBER"},
+            "quality_score": {"label": "Calidad", "sql": "r.quality_score", "joins": [], "type": "NUMBER"},
+            "comment": {"label": "Comentario", "sql": "r.comment", "joins": [], "type": "STRING"},
+            "created_at": {"label": "Fecha", "sql": "r.created_at", "joins": [], "type": "DATE"},
+            "client_name": {"label": "Cliente", "sql": "CONCAT(u.name, ' ', u.last_name)", "joins": ["client"], "type": "STRING"},
         },
     },
     "my_technicians": {
@@ -337,14 +547,14 @@ CATALOG: dict[str, dict] = {
         "workshop_filter": "t.workshop_id = :workshop_id",
         "joins_available": {},
         "fields": {
-            "id": {"label": "ID", "sql": "CAST(t.id AS TEXT)", "joins": []},
-            "name": {"label": "Nombre", "sql": "tu.name", "joins": []},
-            "last_name": {"label": "Apellido", "sql": "tu.last_name", "joins": []},
-            "email": {"label": "Email", "sql": "tu.email", "joins": []},
-            "phone": {"label": "Teléfono", "sql": "tu.phone", "joins": []},
-            "is_available": {"label": "Disponible", "sql": "t.is_available", "joins": []},
-            "is_active": {"label": "Activo", "sql": "tu.is_active", "joins": []},
-            "created_at": {"label": "Fecha Registro", "sql": "tu.created_at", "joins": []},
+            "id": {"label": "ID", "sql": "CAST(t.id AS TEXT)", "joins": [], "type": "STRING"},
+            "name": {"label": "Nombre", "sql": "tu.name", "joins": [], "type": "STRING"},
+            "last_name": {"label": "Apellido", "sql": "tu.last_name", "joins": [], "type": "STRING"},
+            "email": {"label": "Email", "sql": "tu.email", "joins": [], "type": "STRING"},
+            "phone": {"label": "Teléfono", "sql": "tu.phone", "joins": [], "type": "STRING"},
+            "is_available": {"label": "Disponible", "sql": "t.is_available", "joins": [], "type": "BOOLEAN"},
+            "is_active": {"label": "Activo", "sql": "tu.is_active", "joins": [], "type": "BOOLEAN"},
+            "created_at": {"label": "Fecha Registro", "sql": "tu.created_at", "joins": [], "type": "DATE"},
         },
     },
 }
@@ -440,10 +650,34 @@ class ReportRepository:
             else:
                 param_name = f"fv_{i}"
                 op_sql = OPERATOR_SQL[flt.operator].replace(":fv_{i}", f":{param_name}")
+                
+                f_type = valid_fields[flt.field].get("type", "STRING")
+                if f_type == "NUMBER":
+                    op_sql = op_sql.replace(f":{param_name}", f"CAST(:{param_name} AS numeric)")
+                elif f_type == "DATE":
+                    if flt.operator == "like":
+                        continue
+                    op_sql = op_sql.replace(f":{param_name}", f"CAST(:{param_name} AS timestamptz)")
+                elif f_type == "BOOLEAN":
+                    if flt.operator in ("eq", "ne"):
+                        op_sql = op_sql.replace(f":{param_name}", f"CAST(:{param_name} AS boolean)")
+                    else:
+                        continue
+
                 where_parts.append(f"{field_sql} {op_sql}")
                 val = flt.value
                 if flt.operator == "like":
                     val = f"%{val}%"
+                
+                if f_type == "NUMBER" and val is not None:
+                    try:
+                        from decimal import Decimal
+                        val = Decimal(str(val))
+                    except Exception:
+                        pass
+                elif f_type == "BOOLEAN" and val is not None:
+                    val = str(val).lower() in ("true", "1", "yes", "sí", "si")
+
                 params[param_name] = val
 
         # Build full SQL
@@ -523,10 +757,34 @@ class ReportRepository:
             else:
                 param_name = f"fv_{i}"
                 op_sql = OPERATOR_SQL[flt.operator].replace(":fv_{i}", f":{param_name}")
+                
+                f_type = valid_fields[flt.field].get("type", "STRING")
+                if f_type == "NUMBER":
+                    op_sql = op_sql.replace(f":{param_name}", f"CAST(:{param_name} AS numeric)")
+                elif f_type == "DATE":
+                    if flt.operator == "like":
+                        continue
+                    op_sql = op_sql.replace(f":{param_name}", f"CAST(:{param_name} AS timestamptz)")
+                elif f_type == "BOOLEAN":
+                    if flt.operator in ("eq", "ne"):
+                        op_sql = op_sql.replace(f":{param_name}", f"CAST(:{param_name} AS boolean)")
+                    else:
+                        continue
+
                 where_parts.append(f"{field_sql} {op_sql}")
                 val = flt.value
                 if flt.operator == "like":
                     val = f"%{val}%"
+                
+                if f_type == "NUMBER" and val is not None:
+                    try:
+                        from decimal import Decimal
+                        val = Decimal(str(val))
+                    except Exception:
+                        pass
+                elif f_type == "BOOLEAN" and val is not None:
+                    val = str(val).lower() in ("true", "1", "yes", "sí", "si")
+
                 params[param_name] = val
 
         sql = f"SELECT COUNT(*) FROM {entry['from_clause']}"

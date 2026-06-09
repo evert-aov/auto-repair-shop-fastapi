@@ -70,6 +70,8 @@ class ReportTemplateResponse(BaseModel):
 class FieldDefinition(BaseModel):
     key: str
     label: str
+    type: str
+    options: Optional[list[dict[str, Any]]] = None
 
 
 class ReportTypeDefinition(BaseModel):
@@ -85,3 +87,25 @@ class ReportResult(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+class ScheduledReportCreate(BaseModel):
+    frequency: str
+    hour: str
+    email: str
+    format: str = "pdf"
+    is_active: bool = True
+
+
+class ScheduledReportResponse(BaseModel):
+    id: uuid.UUID
+    template_id: uuid.UUID
+    frequency: str
+    hour: str
+    email: str
+    format: str
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
