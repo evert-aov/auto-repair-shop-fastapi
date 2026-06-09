@@ -116,7 +116,7 @@ ADMIN_USER = {
     "last_name": "Sistema",
     "email": "admin@autorepair.com",
     "password": "admin123",
-    "phone": None,
+    "phone": "70000000",
 }
 
 OWNER_USER = {
