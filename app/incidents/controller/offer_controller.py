@@ -377,7 +377,11 @@ async def complete_offer(
             incident_id=incident.id,
             priority="high"
         )
-        
+
+        # Recordatorio de pago si el servicio tiene costo registrado
+        if incident.total_cost and incident.total_cost > 0:
+            await notifier.notify_client_payment_pending(incident)
+
     return OfferResponseDto(
         offer_id=offer.id,
         incident_id=offer.incident_id,

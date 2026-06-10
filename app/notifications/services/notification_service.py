@@ -139,20 +139,18 @@ class NotificationService:
             incident_id: Optional[uuid.UUID] = None,
             priority: str = "normal"
     ) -> Notification:
-        notification = None
-        if notification_type == NotificationType.SERVICE_COMPLETED:
-            notification = Notification(
-                user_id=user_id,
-                incident_id=incident_id,
-                type=notification_type,
-                title=title,
-                body=body,
-                is_read=False,
-                sent_at=datetime.now(timezone.utc),
-            )
-            notification = self.notification_repository.save(notification)
-        else:
-            logger.info(f"📌 Notificación tipo {notification_type} enviada como push sin persistir en BD.")
+        # Persistir SIEMPRE en BD para que aparezca en la campana/listado in-app,
+        # no solo las de tipo SERVICE_COMPLETED. El push vía FCM es adicional.
+        notification = Notification(
+            user_id=user_id,
+            incident_id=incident_id,
+            type=notification_type,
+            title=title,
+            body=body,
+            is_read=False,
+            sent_at=datetime.now(timezone.utc),
+        )
+        notification = self.notification_repository.save(notification)
 
         data = {
             "notification_id": str(notification.id) if notification else str(uuid.uuid4()),
@@ -254,6 +252,27 @@ class NotificationService:
             body=body,
             incident_id=incident.id,
             priority="normal"
+        )
+
+    async def notify_client_payment_pending(
+            self,
+            incident: Incident
+    ) -> Notification:
+        title = "Pago pendiente"
+
+        monto = f" de BOB {incident.total_cost:.2f}" if incident.total_cost else ""
+        body = (
+            f"Tienes un pago pendiente{monto} por el servicio "
+            f"#{str(incident.id)[:8]}. Realiza el pago para poder solicitar otro auxilio."
+        )
+
+        return await self._send_notification(
+            user_id=incident.client_id,
+            notification_type=NotificationType.PAYMENT,
+            title=title,
+            body=body,
+            incident_id=incident.id,
+            priority="high"
         )
 
     async def notify_client_offer_accepted(

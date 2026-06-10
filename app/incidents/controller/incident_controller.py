@@ -234,6 +234,16 @@ def request_help(
 ):
     desc_preview = (incident_data.description or "")[:50]
     logger.info(f"Incident request from user {current_user.id}: {desc_preview!r} vehicle={incident_data.vehicle_id}")
+
+    # Bloqueo: no permitir un nuevo servicio si hay uno completado sin pagar
+    unpaid = _find_unpaid_completed_incident(db, current_user.id)
+    if unpaid:
+        logger.info(f"Bloqueado: el cliente {current_user.id} tiene el servicio {unpaid.id} sin pagar")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Tienes un servicio sin pagar. Completa el pago antes de solicitar otro auxilio.",
+        )
+
     try:
         incident = IncidentService(db).create_incident_request(current_user, incident_data)
     except Exception as e:
@@ -355,6 +365,56 @@ def _build_incident_response(db, incident):
         "technician_name": technician_name,
         "message": "",
     }
+
+
+def _find_unpaid_completed_incident(db, client_id):
+    """Devuelve el incidente COMPLETADO con costo > 0 que aún no tiene un pago
+    COMPLETED del cliente, o None si está todo pagado."""
+    from app.incidents.models.incident import Incident as IncidentModel
+    from app.incidents.models.enums import IncidentStatus
+    from app.payments.models import Payment, PaymentStatus
+
+    completed = (
+        db.query(IncidentModel)
+        .filter(
+            IncidentModel.client_id == client_id,
+            IncidentModel.status == IncidentStatus.COMPLETED,
+        )
+        .order_by(IncidentModel.created_at.desc())
+        .all()
+    )
+    for inc in completed:
+        if not inc.total_cost or inc.total_cost <= 0:
+            continue  # nada que cobrar
+        paid = (
+            db.query(Payment)
+            .filter(
+                Payment.incident_id == inc.id,
+                Payment.status == PaymentStatus.COMPLETED,
+            )
+            .first()
+        )
+        if not paid:
+            return inc
+    return None
+
+
+@router.get(
+    "/pending-payment",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_permission("incidents:read"))],
+)
+def get_pending_payment_incident(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Devuelve el incidente completado sin pagar del cliente (o null).
+    Lo usa la app para forzar el pago antes de permitir otra solicitud."""
+    incident = _find_unpaid_completed_incident(db, current_user.id)
+    if not incident:
+        return None
+    return _build_incident_response(db, incident)
+
 
 @router.get(
     "/pending",
