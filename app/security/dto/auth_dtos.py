@@ -1,9 +1,28 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class LoginRequestDto(BaseModel):
     username: str
     password: str
+
+
+class ForgotPasswordRequestDto(BaseModel):
+    email: EmailStr
+
+
+class VerifyRecoveryCodeRequestDto(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
+
+
+class SendCodeRequestDto(BaseModel):
+    email: EmailStr
+
+
+class SendCodeResponseDto(BaseModel):
+    message: str
+    code: str | None = None
 
 class PermissionDto(BaseModel):
     id: int

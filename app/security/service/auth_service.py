@@ -1,3 +1,6 @@
+import logging
+import os
+
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
@@ -6,7 +9,15 @@ from app.users.repositories.user_repository import UserRepository
 from app.users.services.user_service import UserService
 from app.clients.repositories.client_repository import ClientRepository
 from app.security.config.security import create_access_token
-from app.security.dto.auth_dtos import LoginRequestDto, LoginResponseDto, ProfileUpdateDto, RoleDto
+from app.security.dto.auth_dtos import (
+    LoginRequestDto, LoginResponseDto, ProfileUpdateDto, RoleDto,
+    ForgotPasswordRequestDto, VerifyRecoveryCodeRequestDto,
+    SendCodeRequestDto, SendCodeResponseDto,
+)
+from app.config.mail.code_store import code_store
+from app.config.mail.email_service import email_service
+
+logger = logging.getLogger(__name__)
 
 ROLE_CLIENT = "client"
 ROLE_WORKSHOP_OWNER = "workshop_owner"
@@ -107,3 +118,66 @@ class AuthService:
             return self.client_repository.save(current_user)
 
         return self.user_repository.update(current_user)
+
+    def _is_dev(self) -> bool:
+        return os.getenv("SPRING_PROFILES_ACTIVE", "") == "dev" or os.getenv("ENV", "") == "dev"
+
+    def send_password_recovery_code(self, request: ForgotPasswordRequestDto) -> SendCodeResponseDto:
+        email = request.email
+        user = self.user_repository.get_by_email(email)
+
+        if user is None:
+            if self._is_dev():
+                return SendCodeResponseDto(message="Usuario no encontrado (solo dev)", code=None)
+            return SendCodeResponseDto(message="Si el correo existe, se enviará un código", code=None)
+
+        key = f"recovery_code:{email}"
+        code = code_store.generate_and_store(key)
+
+        if self._is_dev():
+            return SendCodeResponseDto(message="Código generado para pruebas", code=code)
+        else:
+            email_service.send_verification_code(email, code)
+            return SendCodeResponseDto(message="Si el correo existe, se enviará un código", code=None)
+
+    def reset_password(self, request: VerifyRecoveryCodeRequestDto) -> dict:
+        email = request.email
+        key = f"recovery_code:{email}"
+        saved_code = code_store.get(key)
+
+        if saved_code is None or saved_code != request.code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El código de verificación es incorrecto o ha expirado.",
+            )
+
+        user = self.user_repository.get_by_email(email)
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Usuario no encontrado",
+            )
+
+        user.password = UserService.hash_password(request.new_password)
+        self.user_repository.update(user)
+
+        code_store.delete(key)
+
+        return {"message": "Contraseña actualizada exitosamente."}
+
+    def send_verification_code(self, request: SendCodeRequestDto) -> SendCodeResponseDto:
+        email = request.email
+        key = f"verification_code:{email}"
+        code = code_store.generate_and_store(key)
+
+        if self._is_dev():
+            logger.info("Entorno dev: Código generado para %s: %s", email, code)
+            return SendCodeResponseDto(message="Código generado para pruebas", code=code)
+        else:
+            sent = email_service.send_verification_code(email, code)
+            if not sent:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Error al enviar el correo de verificación. Intente nuevamente.",
+                )
+            return SendCodeResponseDto(message="Código enviado exitosamente", code=None)
