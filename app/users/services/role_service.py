@@ -1,10 +1,13 @@
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.users.dtos.role_dtos import RoleCreateDto, RoleUpdateDto
+from app.audit import auditable
+from app.users.audit_mappers import role_to_audit_map, role_from_dto
+from app.users.dtos.role_dtos import RoleCreateDto, RoleUpdateDto, RoleResponseDto
 from app.users.models.role import Role
 from app.users.repositories.role_repository import RoleRepository
 from app.users.repositories.permission_repository import PermissionRepository
@@ -20,6 +23,19 @@ class RoleService:
         self.permission_repository = PermissionRepository(db)
         self.user_repository = UserRepository(db)
 
+    def get_entity(self, id: int) -> Role | None:
+        return self.role_repository.get_by_id(id)
+
+    def to_audit_map(self, entity: Role) -> dict[str, Any]:
+        return role_to_audit_map(entity)
+
+    def to_audit_map_from_result(self, result: Any) -> dict[str, Any]:
+        if isinstance(result, RoleResponseDto):
+            return role_from_dto(result)
+        if isinstance(result, Role):
+            return role_to_audit_map(result)
+        return {}
+
     def _resolve_permissions(self, permission_ids: list[int]):
         """Devuelve los objetos Permission correspondientes; lanza 404 si alguno no existe."""
         permissions = []
@@ -33,6 +49,7 @@ class RoleService:
             permissions.append(perm)
         return permissions
 
+    @auditable(resource_type="ROLE", action_type="CREATE")
     def create_role(self, dto: RoleCreateDto) -> Role:
         if self.role_repository.exists_by_name(dto.name):
             raise HTTPException(
@@ -59,6 +76,7 @@ class RoleService:
             )
         return role
 
+    @auditable(resource_type="ROLE", action_type="UPDATE", id_param_name="role_id")
     def update_role(self, role_id: int, dto: RoleUpdateDto) -> Role:
         role = self.get_role_by_id(role_id)
 
@@ -80,6 +98,7 @@ class RoleService:
 
         return self.role_repository.save(role)
 
+    @auditable(resource_type="ROLE", action_type="DELETE", id_param_name="role_id")
     def delete_role(self, role_id: int) -> None:
         role = self.get_role_by_id(role_id)
         self.role_repository.delete(role)

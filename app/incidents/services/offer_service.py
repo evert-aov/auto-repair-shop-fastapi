@@ -1,10 +1,12 @@
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
+from app.audit import auditable
+from app.incidents.audit_mappers import offer_to_audit_map, offer_from_dto
 from app.incidents.models import (
     Incident,
     IncidentStatus,
@@ -41,6 +43,17 @@ class OfferService:
         self.offer_repository = OfferRepository(db)
         self.status_history_repository = StatusHistoryRepository(db)
         self.workshop_repository = WorkshopRepository(db)
+
+    def get_entity(self, id: uuid.UUID) -> WorkshopOffer | None:
+        return self.offer_repository.get_by_id(id)
+
+    def to_audit_map(self, entity: WorkshopOffer) -> dict[str, Any]:
+        return offer_to_audit_map(entity)
+
+    def to_audit_map_from_result(self, result: Any) -> dict[str, Any]:
+        if isinstance(result, WorkshopOffer):
+            return offer_to_audit_map(result)
+        return {}
 
     # =================================================================
     # ACCEPT

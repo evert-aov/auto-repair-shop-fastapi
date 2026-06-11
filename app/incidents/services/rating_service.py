@@ -1,8 +1,11 @@
 import logging
+from typing import Any
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.incidents.dtos.rating_dtos import RatingCreateDto
+from app.audit import auditable
+from app.incidents.audit_mappers import rating_to_audit_map, rating_from_dto
+from app.incidents.dtos.rating_dtos import RatingCreateDto, RatingResponseDto
 from app.incidents.models import Rating, Incident, IncidentStatus
 from app.payments.models import Payment, PaymentStatus
 from app.incidents.repositories.rating_repository import RatingRepository
@@ -23,6 +26,20 @@ class RatingService:
         self.incident_repository = IncidentRepository(db)
         self.payment_repository = PaymentRepository(db)
 
+    def get_entity(self, id: Any) -> Rating | None:
+        return self.rating_repository.get_by_id(id)
+
+    def to_audit_map(self, entity: Rating) -> dict[str, Any]:
+        return rating_to_audit_map(entity)
+
+    def to_audit_map_from_result(self, result: Any) -> dict[str, Any]:
+        if isinstance(result, RatingResponseDto):
+            return rating_from_dto(result)
+        if isinstance(result, Rating):
+            return rating_to_audit_map(result)
+        return {}
+
+    @auditable(resource_type="RATING", action_type="CREATE")
     def create_rating(self, current_user: User, data: RatingCreateDto) -> Rating:
         # 1. Obtener incidente y validar
         incident = self.incident_repository.get_by_id(data.incident_id)

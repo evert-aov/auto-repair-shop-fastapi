@@ -1,11 +1,13 @@
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import List
+from typing import Any, List
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 
+from app.audit import auditable
+from app.workshops.audit_mappers import workshop_to_audit_map, workshop_from_dto
 from app.workshops.models import Workshop, Technician
 from app.workshops.repositories.workshop_repository import WorkshopRepository
 
@@ -16,6 +18,7 @@ from app.users.repositories.user_repository import UserRepository
 from app.users.repositories.role_repository import RoleRepository
 from app.users.services.user_service import UserService
 from app.workshops.repositories.specialty_repository import SpecialtyRepository
+from app.config.mail.email_service import email_service
 
 class WorkshopService:
     def __init__(self, db: Session):
@@ -23,6 +26,17 @@ class WorkshopService:
         self.specialty_repo = SpecialtyRepository(db)
         self.technician_repo = TechnicianRepository(db)
         self.db = db
+
+    def get_entity(self, id: uuid.UUID) -> Workshop | None:
+        return self.repository.get_by_id(id)
+
+    def to_audit_map(self, entity: Workshop) -> dict[str, Any]:
+        return workshop_to_audit_map(entity)
+
+    def to_audit_map_from_result(self, result: Any) -> dict[str, Any]:
+        if isinstance(result, Workshop):
+            return workshop_to_audit_map(result)
+        return {}
 
     def _get_owner_workshop(self, owner_user_id: uuid.UUID) -> Workshop:
         """Return the Workshop whose owner_user_id matches. Avoids deferred workshop_id load."""
@@ -33,6 +47,7 @@ class WorkshopService:
             raise HTTPException(status_code=404, detail="Taller no encontrado para este propietario")
         return workshop
 
+    @auditable(resource_type="WORKSHOP", action_type="CREATE")
     def register_public(self, dto: WorkshopRegisterPublic) -> Workshop:
         user_repo = UserRepository(self.db)
         role_repo = RoleRepository(self.db)
@@ -94,6 +109,8 @@ class WorkshopService:
             self.db.rollback()
             raise
 
+        email_service.send_new_password(dto.email, technician.username, dto.owner_password)
+
         return workshop
 
     def get_by_owner_user_id(self, owner_user_id: uuid.UUID) -> Workshop:
@@ -128,6 +145,7 @@ class WorkshopService:
     def get_all(self, verified_only: bool = None) -> List[Workshop]:
         return self.repository.get_all(verified_only)
 
+    @auditable(resource_type="WORKSHOP", action_type="UPDATE", id_param_name="workshop_id")
     def update_admin(self, workshop_id: uuid.UUID, dto: WorkshopAdminUpdate) -> Workshop:
         workshop = self.get_by_id(workshop_id)
         self.validate_fields(dto, workshop)
@@ -149,6 +167,7 @@ class WorkshopService:
             
         return self.repository.update(workshop)
 
+    @auditable(resource_type="WORKSHOP", action_type="UPDATE", id_param_name="workshop_id")
     def update_owner(self, workshop_id: uuid.UUID, dto: WorkshopUpdate) -> Workshop:
         workshop = self.get_by_id(workshop_id)
         self.validate_fields(dto, workshop)
@@ -212,6 +231,7 @@ class WorkshopService:
         )
         return {"workshop_id": str(workshop_id), "workshop_name": workshop.name, "offers_cleared": cleared}
 
+    @auditable(resource_type="WORKSHOP", action_type="DELETE", id_param_name="workshop_id")
     def delete(self, workshop_id: uuid.UUID) -> None:
         workshop = self.get_by_id(workshop_id)
         self.db.delete(workshop)

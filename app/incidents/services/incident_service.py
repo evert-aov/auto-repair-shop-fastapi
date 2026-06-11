@@ -1,9 +1,13 @@
 import logging
+import uuid
+from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.incidents.dtos.incident_dtos import IncidentCreateDto
+from app.audit import auditable
+from app.incidents.audit_mappers import incident_to_audit_map, incident_from_dto
+from app.incidents.dtos.incident_dtos import IncidentCreateDto, IncidentResponseDto
 from app.incidents.models import (
     Incident, IncidentEvidence, IncidentStatus, EvidenceType
 )
@@ -23,6 +27,20 @@ class IncidentService:
         self.incident_repository = IncidentRepository(db)
         self.evidence_repository = EvidenceRepository(db)
 
+    def get_entity(self, id: uuid.UUID) -> Incident | None:
+        return self.incident_repository.get_by_id(id)
+
+    def to_audit_map(self, entity: Incident) -> dict[str, Any]:
+        return incident_to_audit_map(entity)
+
+    def to_audit_map_from_result(self, result: Any) -> dict[str, Any]:
+        if isinstance(result, IncidentResponseDto):
+            return incident_from_dto(result)
+        if isinstance(result, Incident):
+            return incident_to_audit_map(result)
+        return {}
+
+    @auditable(resource_type="INCIDENT", action_type="CREATE")
     def create_incident_request(
         self,
         current_user: User,
@@ -60,6 +78,7 @@ class IncidentService:
 
         return incident
 
+    @auditable(resource_type="INCIDENT", action_type="UPDATE", id_param_name="incident_id")
     def cancel_incident(self, incident_id: uuid.UUID, current_user: User) -> Incident:
         incident = self.incident_repository.get_by_id(incident_id)
         if not incident:

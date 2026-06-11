@@ -12,6 +12,7 @@ from app.users.services.user_service import UserService
 from app.workshops.dtos.technician_dto import TechnicianCreate, TechnicianUpdate
 from app.workshops.models import Technician
 from app.workshops.repositories.technician_repository import TechnicianRepository
+from app.config.mail.email_service import email_service
 
 
 class TechnicianService:
@@ -77,7 +78,11 @@ class TechnicianService:
         )
         technician.roles = [self._get_technician_role()]
 
-        return self.repository.create(technician)
+        technician = self.repository.create(technician)
+
+        email_service.send_new_password(technician.email, technician.username, dto.password)
+
+        return technician
 
     def get_by_id_and_workshop(self, technician_id: uuid.UUID, workshop_id: uuid.UUID) -> Technician:
         return self._get_technician_or_404(technician_id, workshop_id)
