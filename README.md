@@ -191,11 +191,6 @@ Toda consulta ejecutada por el motor analítico dinámico utiliza estrictamente 
 | **Control por Endpoint (`/taller/{id}`)** | No (Retorna todo el objeto o nada) | Baja | Baja |
 | **Control a nivel de Atributo (ARS)** | **Sí** (Oculta precios, calificaciones, ingresos) | **Alta** (Granularidad según permisos) | Media (Constructor SQL dinámico) |
 
----
-
-## Documentación Técnica
-
-- [`docs/ai_reports_implementation.md`](docs/ai_reports_implementation.md) — Análisis arquitectónico del asistente de voz, Speech-to-Text y procesamiento con Gemini 2.5 Flash.
 
 ---
 
