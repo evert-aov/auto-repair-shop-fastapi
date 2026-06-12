@@ -23,13 +23,13 @@ class EmailService:
     def is_configured(self) -> bool:
         return bool(self._host and self._username and self._password)
 
-    def send_verification_code(self, to: str, code: str) -> bool:
+    def send_verification_code(self, to: str, username: str, code: str) -> bool:
         subject = "Código de verificación - Auto Repair"
         content = (
             "<div style='font-family: Arial, sans-serif; max-width: 600px; margin: auto; "
             "border: 1px solid #eee; padding: 20px;'>"
             "<h2 style='color: #0056b3;'>Verificación de Correo Electrónico</h2>"
-            "<p>Hola,</p>"
+            f"<p>Hola <strong>{username}</strong>,</p>"
             "<p>Has solicitado verificar tu correo en nuestro sistema. "
             "Utiliza el siguiente código para confirmar tu identidad:</p>"
             "<div style='background-color: #f9f9f9; padding: 15px; text-align: center; "

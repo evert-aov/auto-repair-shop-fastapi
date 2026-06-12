@@ -74,7 +74,7 @@ def update_technician(
     """Owner only: Update technician details."""
     service = TechnicianService(db)
     workshop_id = service.get_owner_workshop_id(current_user.id)
-    return service.update(workshop_id, technician_id, dto)
+    return service.update(workshop_id, technician_id=technician_id, dto=dto)
 
 
 @router.delete("/{technician_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -87,4 +87,4 @@ def delete_technician(
     """Owner only: Soft delete technician."""
     service = TechnicianService(db)
     workshop_id = service.get_owner_workshop_id(current_user.id)
-    service.delete(workshop_id, technician_id)
+    service.delete(workshop_id, technician_id=technician_id)

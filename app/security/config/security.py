@@ -56,7 +56,19 @@ def get_current_user(
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario no encontrado o inactivo")
 
+    _set_user_on_request(user)
+
     return user
+
+
+def _set_user_on_request(user) -> None:
+    try:
+        from app.audit.middleware.audit_middleware import get_current_request
+        request = get_current_request()
+        if request is not None:
+            request.state.current_user = user
+    except Exception:
+        pass
 
 
 

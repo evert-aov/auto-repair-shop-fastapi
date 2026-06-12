@@ -22,6 +22,7 @@ def workshop_to_audit_map(entity: Workshop) -> dict[str, Any]:
     m["total_services"] = entity.total_services
     m["rejection_count"] = entity.rejection_count
     m["rejection_rate"] = entity.rejection_rate
+    m["last_rejection_at"] = entity.last_rejection_at.isoformat() if entity.last_rejection_at else None
     m["activity_points"] = entity.activity_points
     m["paypal_email"] = entity.paypal_email
     m["is_active"] = entity.is_active
@@ -60,6 +61,7 @@ def technician_to_audit_map(entity: Technician) -> dict[str, Any]:
     m["phone"] = entity.phone
     m["is_active"] = entity.is_active
     m["type"] = entity.type
+    m["fcm_token"] = entity.fcm_token
     m["workshop_id"] = str(entity.workshop_id) if entity.workshop_id else None
     m["current_latitude"] = float(entity.current_latitude) if entity.current_latitude else None
     m["current_longitude"] = float(entity.current_longitude) if entity.current_longitude else None

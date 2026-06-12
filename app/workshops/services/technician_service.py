@@ -1,14 +1,16 @@
 import uuid
-from typing import List
+from typing import Any, List
 
 import bcrypt
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 
+from app.audit import auditable
 from app.users.models.role import Role
 from app.users.repositories.user_repository import UserRepository
 from app.users.services.user_service import UserService
+from app.workshops.audit_mappers import technician_to_audit_map
 from app.workshops.dtos.technician_dto import TechnicianCreate, TechnicianUpdate
 from app.workshops.models import Technician
 from app.workshops.repositories.technician_repository import TechnicianRepository
@@ -21,6 +23,17 @@ class TechnicianService:
         self.user_repository = UserRepository(db)
         self.user_service = UserService(db)
         self.db = db
+
+    def get_entity(self, id: uuid.UUID) -> Technician | None:
+        return self.repository.get_by_id(id)
+
+    def to_audit_map(self, entity: Technician) -> dict[str, Any]:
+        return technician_to_audit_map(entity)
+
+    def to_audit_map_from_result(self, result: Any) -> dict[str, Any]:
+        if isinstance(result, Technician):
+            return technician_to_audit_map(result)
+        return {}
 
     # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -58,6 +71,7 @@ class TechnicianService:
 
     # ── CRUD ─────────────────────────────────────────────────────────────────────
 
+    @auditable(resource_type="TECHNICIAN", action_type="CREATE")
     def create(self, workshop_id: uuid.UUID, dto: TechnicianCreate) -> Technician:
         if self.user_repository.get_by_email(dto.email):
             raise HTTPException(
@@ -90,6 +104,7 @@ class TechnicianService:
     def get_all_by_workshop(self, workshop_id: uuid.UUID) -> List[Technician]:
         return self.repository.get_by_workshop(workshop_id)
 
+    @auditable(resource_type="TECHNICIAN", action_type="UPDATE", id_param_name="technician_id")
     def update(self, workshop_id: uuid.UUID, technician_id: uuid.UUID, dto: TechnicianUpdate) -> Technician:
         technician = self._get_technician_or_404(technician_id, workshop_id)
 
@@ -104,6 +119,7 @@ class TechnicianService:
 
         return self.repository.update(technician)
 
+    @auditable(resource_type="TECHNICIAN", action_type="DELETE", id_param_name="technician_id")
     def delete(self, workshop_id: uuid.UUID, technician_id: uuid.UUID) -> None:
         technician = self._get_technician_or_404(technician_id, workshop_id)
         self.repository.delete(technician)

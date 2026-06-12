@@ -137,7 +137,12 @@ class AuthService:
         if self._is_dev():
             return SendCodeResponseDto(message="Código generado para pruebas", code=code)
         else:
-            email_service.send_verification_code(email, code)
+            sent = email_service.send_verification_code(email, user.username, code)
+            if not sent:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Error al enviar el correo de recuperación. Intente nuevamente.",
+                )
             return SendCodeResponseDto(message="Si el correo existe, se enviará un código", code=None)
 
     def reset_password(self, request: VerifyRecoveryCodeRequestDto) -> dict:
@@ -170,14 +175,45 @@ class AuthService:
         key = f"verification_code:{email}"
         code = code_store.generate_and_store(key)
 
+        username = "Usuario"
+        user = self.user_repository.get_by_email(email)
+        if user:
+            username = user.username
+
         if self._is_dev():
             logger.info("Entorno dev: Código generado para %s: %s", email, code)
             return SendCodeResponseDto(message="Código generado para pruebas", code=code)
         else:
-            sent = email_service.send_verification_code(email, code)
+            sent = email_service.send_verification_code(email, username, code)
             if not sent:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Error al enviar el correo de verificación. Intente nuevamente.",
                 )
             return SendCodeResponseDto(message="Código enviado exitosamente", code=None)
+
+    def verify_code(self, email: str, code: str) -> dict:
+        """Verifica el código de verificación para registro.
+        
+        Returns:
+            dict con {"valid": true} si el código es válido y no ha expirado.
+            
+        Raises:
+            HTTPException 400 si el código es inválido o expiró.
+        """
+        key = f"verification_code:{email}"
+        saved_code = code_store.get(key)
+        
+        if saved_code is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El código de verificación ha expirado. Solicita uno nuevo.",
+            )
+        
+        if saved_code != code:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El código de verificación es incorrecto.",
+            )
+        
+        return {"valid": True, "message": "Código verificado correctamente"}

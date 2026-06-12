@@ -44,21 +44,9 @@ EXCLUDED_PATHS = _DEFAULT_EXCLUDED | _extra_excluded
 _TRUSTED_PROXIES_RAW = os.getenv("AUDIT_TRUSTED_PROXIES", "")
 TRUSTED_PROXIES = {ip.strip() for ip in _TRUSTED_PROXIES_RAW.split(",") if ip.strip()}
 
-_audit_aspect_active: contextvars.ContextVar[bool] = contextvars.ContextVar(
-    "audit_aspect_active", default=False
-)
-
 _current_request: contextvars.ContextVar[Request | None] = contextvars.ContextVar(
     "audit_current_request", default=None
 )
-
-
-def set_audit_aspect_active(active: bool) -> None:
-    _audit_aspect_active.set(active)
-
-
-def is_audit_aspect_active() -> bool:
-    return _audit_aspect_active.get()
 
 
 def get_current_request() -> Request | None:
@@ -92,7 +80,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 self._build_and_save(request, body_bytes, 500, str(e), elapsed_ms)
                 raise
 
-            if not is_audit_aspect_active():
+            if not getattr(request.state, '_audited', False):
                 elapsed_ms = int((time.time() - start_time) * 1000)
                 self._build_and_save(request, body_bytes, response.status_code, None, elapsed_ms)
             else:

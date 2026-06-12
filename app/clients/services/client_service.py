@@ -14,6 +14,7 @@ from app.users.repositories.user_repository import UserRepository
 from app.users.repositories.role_repository import RoleRepository
 from app.users.services.user_service import UserService
 from app.config.mail.email_service import email_service
+from app.config.mail.code_store import code_store
 
 ROLE_CLIENT = "client"
 
@@ -43,14 +44,23 @@ class ClientService:
 
     @auditable(resource_type="CLIENT", action_type="CREATE")
     def create_client(self, data: ClientCreateDTO) -> Client:
-        # 1. Validar que email no exista
+        # 1. Verificar código de verificación (previene registros sin verificar email)
+        key = f"verification_code:{data.user.email}"
+        saved_code = code_store.get(key)
+        if saved_code is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Código de verificación expirado o no solicitado. Solicita uno nuevo.",
+            )
+
+        # 2. Validar que email no exista
         if self.user_repository.get_by_email(data.user.email):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"El email '{data.user.email}' ya está registrado",
             )
 
-        # 2. Obtener rol "client"
+        # 3. Obtener rol "client"
         role = self.role_repository.get_by_name(ROLE_CLIENT)
         if not role:
             raise HTTPException(
@@ -58,7 +68,7 @@ class ClientService:
                 detail="Rol 'client' no encontrado. Ejecuta el seed primero.",
             )
 
-        # 3. Crear el Client directamente (hereda de User via joined-table inheritance)
+        # 4. Crear el Client directamente (hereda de User via joined-table inheritance)
         client = Client(
             username=self.user_service.generate_username(),
             name=data.user.name,
@@ -75,6 +85,10 @@ class ClientService:
 
         client = self.client_repository.save(client)
 
+        # 5. Eliminar código de verificación (uso único)
+        code_store.delete(key)
+
+        # 6. Enviar email de confirmación (opcional, en prod)
         email_service.send_new_password(client.email, client.username, data.password)
 
         return client

@@ -2,7 +2,7 @@ import io
 import uuid
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -23,13 +23,22 @@ def _get_audit_service() -> AuditLogService:
     return AuditLogService.get_instance()
 
 
+def _parse_workshop_id(raw: str | None) -> uuid.UUID | None:
+    if not raw or not raw.strip():
+        return None
+    try:
+        return uuid.UUID(raw.strip())
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"workshop_id inválido: '{raw}' no es un UUID válido")
+
+
 @router.get(
     "",
     response_model=AuditPage,
     dependencies=[Depends(require_admin)],
 )
 def list_audit_logs(
-    workshop_id: uuid.UUID | None = Query(None),
+    workshop_id: str | None = Query(None),
     user_identifier: str | None = Query(None),
     action_type: str | None = Query(None),
     resource_type: str | None = Query(None),
@@ -40,8 +49,9 @@ def list_audit_logs(
     db: Session = Depends(get_audit_db),
     service: AuditLogService = Depends(_get_audit_service),
 ):
+    ws_id = _parse_workshop_id(workshop_id)
     filtro = AuditFilter(
-        workshop_id=workshop_id,
+        workshop_id=ws_id,
         user_identifier=user_identifier,
         action_type=action_type,
         resource_type=resource_type,
@@ -98,7 +108,7 @@ def verify_all(
     dependencies=[Depends(require_admin)],
 )
 def export_csv(
-    workshop_id: uuid.UUID | None = Query(None),
+    workshop_id: str | None = Query(None),
     user_identifier: str | None = Query(None),
     action_type: str | None = Query(None),
     resource_type: str | None = Query(None),
@@ -107,8 +117,9 @@ def export_csv(
     db: Session = Depends(get_audit_db),
     service: AuditLogService = Depends(_get_audit_service),
 ):
+    ws_id = _parse_workshop_id(workshop_id)
     filtro = AuditFilter(
-        workshop_id=workshop_id,
+        workshop_id=ws_id,
         user_identifier=user_identifier,
         action_type=action_type,
         resource_type=resource_type,

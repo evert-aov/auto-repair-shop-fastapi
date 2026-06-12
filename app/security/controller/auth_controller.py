@@ -8,7 +8,7 @@ from app.database import get_db
 from app.clients.dtos.client_dtos import ClientCreateDTO, ClientResponseDTO
 from app.users.dtos.user_dtos import UserResponseDto
 from app.security.config.security import get_current_user, require_permission
-from app.security.dto.auth_dtos import LoginRequestDto, LoginResponseDto, ProfileUpdateDto, SendCodeRequestDto, VerifyRecoveryCodeRequestDto, ForgotPasswordRequestDto
+from app.security.dto.auth_dtos import LoginRequestDto, LoginResponseDto, ProfileUpdateDto, SendCodeRequestDto, VerifyRecoveryCodeRequestDto, ForgotPasswordRequestDto, VerifyCodeRequestDto
 from app.security.service.auth_service import AuthService
 from app.clients.services.client_service import ClientService
 
@@ -92,6 +92,11 @@ def reset_password(data: VerifyRecoveryCodeRequestDto, db: Session = Depends(get
 @router.post("/public/send-verification-code", status_code=status.HTTP_200_OK)
 def send_verification_code(data: SendCodeRequestDto, db: Session = Depends(get_db)):
     return AuthService(db).send_verification_code(data)
+
+
+@router.post("/public/verify-code", status_code=status.HTTP_200_OK)
+def verify_code(data: VerifyCodeRequestDto, db: Session = Depends(get_db)):
+    return AuthService(db).verify_code(data.email, data.code)
 
 
 # ── Endpoints protegidos por rol (ejemplos de uso de require_role) ──────────

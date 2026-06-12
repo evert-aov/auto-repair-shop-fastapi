@@ -9,13 +9,18 @@ from typing import Any, Callable
 from app.audit.database import AuditSessionLocal
 from app.audit.models.audit_log import AuditLog
 from app.audit.middleware.audit_middleware import (
-    set_audit_aspect_active,
     get_current_request,
 )
 from app.audit.services.audit_log_service import AuditLogService
 from app.audit.utils.auditoria_utils import AuditoriaUtils
 
 logger = logging.getLogger("audit.decorator")
+
+
+def _mark_request_audited() -> None:
+    request = get_current_request()
+    if request is not None:
+        request.state._audited = True
 
 
 def auditable(
@@ -35,8 +40,16 @@ def auditable(
                     entity = self_obj.get_entity(resource_id)
                     if entity is not None:
                         state_antes = self_obj.to_audit_map(entity)
+                    else:
+                        logger.warning(
+                            "get_entity returned None for %s id=%s — entity may have been deleted already",
+                            resource_type, resource_id,
+                        )
                 except Exception as e:
-                    logger.debug("Could not get before state for %s: %s", resource_type, e)
+                    logger.error(
+                        "Could not get before state for %s id=%s: %s",
+                        resource_type, resource_id, e, exc_info=True,
+                    )
 
             start = time.time()
             result = None
@@ -74,7 +87,10 @@ def auditable(
                         if entity_after is not None:
                             state_despues = self_obj.to_audit_map(entity_after)
                 except Exception as e:
-                    logger.debug("Could not get after state for %s: %s", resource_type, e)
+                    logger.error(
+                        "Could not get after state for %s id=%s: %s",
+                        resource_type, id_final, e, exc_info=True,
+                    )
 
             _build_and_save(
                 resource_type=resource_type,
@@ -105,6 +121,10 @@ def _extract_id(args: tuple, kwargs: dict, id_param_name: str) -> Any:
         candidate = args[1]
         if isinstance(candidate, (str, int, uuid.UUID)):
             return candidate
+        logger.warning(
+            "Could not extract ID from positional args: id_param_name=%s, args[1] type=%s",
+            id_param_name, type(candidate).__name__,
+        )
     return None
 
 
@@ -122,6 +142,12 @@ def _build_and_save(
         datos_antes = state_antes
         datos_nuevos = state_despues
 
+        if action_type in ("UPDATE", "DELETE") and resource_id is not None and (datos_antes is None or len(datos_antes) == 0):
+            logger.warning(
+                "Audit warning: %s %s id=%s has no before-state data captured",
+                action_type, resource_type, resource_id,
+            )
+
         if action_type == "UPDATE" and state_antes is not None and state_despues is not None:
             diff = AuditoriaUtils.calculate_diff(state_antes, state_despues)
             datos_antes = diff[0]
@@ -132,7 +158,16 @@ def _build_and_save(
         entry.action_type = action_type
         entry.resource_type = resource_type
         entry.resource_id = str(resource_id) if resource_id else None
-        entry.resource_name = f"{resource_type}/{resource_id}" if resource_id else resource_type
+
+        if datos_antes:
+            readable_name = datos_antes.get("name") or datos_antes.get("business_name") or datos_antes.get("username")
+            if readable_name:
+                entry.resource_name = f"{readable_name} ({resource_type}/{resource_id})" if resource_id else readable_name
+            else:
+                entry.resource_name = f"{resource_type}/{resource_id}" if resource_id else resource_type
+        else:
+            entry.resource_name = f"{resource_type}/{resource_id}" if resource_id else resource_type
+
         entry.response_status = 500 if error else 200
         entry.execution_time_ms = execution_time_ms
         entry.severity = "CRITICAL" if error else "INFO"
@@ -149,7 +184,7 @@ def _build_and_save(
 
         _capture_http_context(entry, func)
 
-        set_audit_aspect_active(True)
+        _mark_request_audited()
         db = AuditSessionLocal()
         try:
             AuditLogService.get_instance().log_action(entry, db)

@@ -19,6 +19,7 @@ def incident_to_audit_map(entity: Incident) -> dict[str, Any]:
     m["ai_priority"] = entity.ai_priority.name if entity.ai_priority else None
     m["ai_summary"] = entity.ai_summary
     m["ai_confidence"] = entity.ai_confidence
+    m["vertex_analysis"] = entity.vertex_analysis
     m["assigned_workshop_id"] = str(entity.assigned_workshop_id) if entity.assigned_workshop_id else None
     m["assigned_technician_id"] = str(entity.assigned_technician_id) if entity.assigned_technician_id else None
     m["estimated_arrival_min"] = entity.estimated_arrival_min

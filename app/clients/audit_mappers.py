@@ -16,6 +16,7 @@ def client_to_audit_map(entity: Client) -> dict[str, Any]:
     m["phone"] = entity.phone
     m["is_active"] = entity.is_active
     m["type"] = entity.type
+    m["fcm_token"] = entity.fcm_token
     m["address"] = entity.address
     m["insurance_provider"] = entity.insurance_provider
     m["insurance_policy_number"] = entity.insurance_policy_number

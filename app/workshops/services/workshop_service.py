@@ -19,6 +19,7 @@ from app.users.repositories.role_repository import RoleRepository
 from app.users.services.user_service import UserService
 from app.workshops.repositories.specialty_repository import SpecialtyRepository
 from app.config.mail.email_service import email_service
+from app.config.mail.code_store import code_store
 
 class WorkshopService:
     def __init__(self, db: Session):
@@ -52,11 +53,21 @@ class WorkshopService:
         user_repo = UserRepository(self.db)
         role_repo = RoleRepository(self.db)
         user_service = UserService(self.db)
+        
         # Verify email uniqueness for User (Technician inherits from User)
         if user_repo.get_by_email(dto.email):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"El email '{dto.email}' ya está registrado"
+            )
+
+        # Verify code of verification (prevents registration without verified email)
+        key = f"verification_code:{dto.email}"
+        saved_code = code_store.get(key)
+        if saved_code is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Código de verificación expirado o no solicitado. Solicita uno nuevo.",
             )
 
         owner_role = role_repo.get_by_name("workshop_owner")
@@ -108,6 +119,9 @@ class WorkshopService:
         except Exception:
             self.db.rollback()
             raise
+
+        # Delete verification code (single use)
+        code_store.delete(key)
 
         email_service.send_new_password(dto.email, technician.username, dto.owner_password)
 

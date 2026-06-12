@@ -20,6 +20,11 @@ class SendCodeRequestDto(BaseModel):
     email: EmailStr
 
 
+class VerifyCodeRequestDto(BaseModel):
+    email: EmailStr
+    code: str
+
+
 class SendCodeResponseDto(BaseModel):
     message: str
     code: str | None = None
