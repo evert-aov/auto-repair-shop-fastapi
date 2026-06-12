@@ -6,8 +6,7 @@
 
 | Recurso | Enlace |
 |---|---|
-| Documento de Reportes e IA (PDF) | [`docs/ai_reports_implementation.md`](docs/ai_reports_implementation.md) |
-| Repositorio público | https://github.com/evert-aov/SI2-ARS-backend |
+| Repositorio público | https://github.com/InformationSystem2/auto-repair-shop-fastapi/tree/main |
 
 ---
 
