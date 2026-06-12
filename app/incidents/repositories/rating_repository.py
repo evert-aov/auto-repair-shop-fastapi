@@ -11,6 +11,9 @@ class RatingRepository:
     def __init__(self, db: Session):
         self.db = db
 
+    def get_by_id(self, rating_id: uuid.UUID) -> Rating | None:
+        return self.db.query(Rating).filter(Rating.id == rating_id).first()
+
     def save(self, rating: Rating) -> Rating:
         self.db.add(rating)
         self.db.commit()

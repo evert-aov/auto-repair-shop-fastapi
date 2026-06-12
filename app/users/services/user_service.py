@@ -1,13 +1,15 @@
 import random
+from typing import Any
 from uuid import UUID
-from typing import Optional
 
 import bcrypt
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.users.dtos.user_dtos import UserCreateDto, UserUpdateDto
+from app.audit import auditable
+from app.users.audit_mappers import user_to_audit_map, user_from_dto
+from app.users.dtos.user_dtos import UserCreateDto, UserUpdateDto, UserResponseDto
 from app.users.models.user import User
 from app.users.repositories.role_repository import RoleRepository
 from app.users.repositories.user_repository import UserRepository
@@ -17,6 +19,19 @@ class UserService:
     def __init__(self, db: Session) -> None:
         self.user_repository = UserRepository(db)
         self.role_repository = RoleRepository(db)
+
+    def get_entity(self, id: UUID) -> User | None:
+        return self.user_repository.get_by_id(id)
+
+    def to_audit_map(self, entity: User) -> dict[str, Any]:
+        return user_to_audit_map(entity)
+
+    def to_audit_map_from_result(self, result: Any) -> dict[str, Any]:
+        if isinstance(result, UserResponseDto):
+            return user_from_dto(result)
+        if isinstance(result, User):
+            return user_to_audit_map(result)
+        return {}
 
     # ── Utilidades de contraseña ─────────────────────────────────────────────────
 
@@ -65,6 +80,7 @@ class UserService:
 
     # ── CRUD ─────────────────────────────────────────────────────────────────────
 
+    @auditable(resource_type="USER", action_type="CREATE")
     def create_user(self, data: UserCreateDto) -> User:
         if self.user_repository.get_by_email(data.email):
             raise HTTPException(
@@ -92,6 +108,7 @@ class UserService:
     def get_user_by_id(self, user_id: UUID) -> User:
         return self._get_user_or_404(user_id)
 
+    @auditable(resource_type="USER", action_type="UPDATE", id_param_name="user_id")
     def update_user(self, user_id: UUID, data: UserUpdateDto) -> User:
         user = self._get_user_or_404(user_id)
 
@@ -110,6 +127,7 @@ class UserService:
 
         return self.user_repository.update(user)
 
+    @auditable(resource_type="USER", action_type="DELETE", id_param_name="user_id")
     def delete_user(self, user_id: UUID) -> None:
         user = self._get_user_or_404(user_id)
         self.user_repository.delete(user)

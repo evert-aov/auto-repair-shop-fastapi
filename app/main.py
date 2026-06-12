@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
+from app.audit.middleware.audit_middleware import AuditMiddleware
 
 # Import models to ensure they are registered with SQLAlchemy
 
@@ -34,7 +35,9 @@ async def lifespan(app: FastAPI):
     # Startup logic
     start_scheduler()
     _ensure_specialties()
-    logger.info("App iniciada con scheduler")
+    from app.audit.database import ensure_audit_table
+    ensure_audit_table()
+    logger.info("App iniciada con scheduler y auditoria")
     yield
     # Shutdown logic
     stop_scheduler()
@@ -111,3 +114,8 @@ app.include_router(location_ws_router)
 
 from app.incidents.controller.rating_controller import router as ratings_router
 app.include_router(ratings_router)
+
+from app.audit.controller.audit_controller import router as audit_router
+app.include_router(audit_router)
+
+app.add_middleware(AuditMiddleware)

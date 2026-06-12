@@ -1,10 +1,13 @@
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 
-from app.clients.dtos.vehicle_dtos import VehicleCreateDTO, VehicleUpdateDTO
+from app.audit import auditable
+from app.clients.audit_mappers import vehicle_to_audit_map, vehicle_from_dto
+from app.clients.dtos.vehicle_dtos import VehicleCreateDTO, VehicleUpdateDTO, VehicleResponseDTO
 from app.clients.models import Vehicle
 from app.clients.repositories.vehicle_repository import VehicleRepository
 from app.clients.repositories.client_repository import ClientRepository
@@ -19,6 +22,20 @@ class VehicleService:
         self.vehicle_repository = VehicleRepository(db)
         self.client_repository = ClientRepository(db)
 
+    def get_entity(self, id: UUID) -> Vehicle | None:
+        return self.vehicle_repository.get_by_id(id)
+
+    def to_audit_map(self, entity: Vehicle) -> dict[str, Any]:
+        return vehicle_to_audit_map(entity)
+
+    def to_audit_map_from_result(self, result: Any) -> dict[str, Any]:
+        if isinstance(result, VehicleResponseDTO):
+            return vehicle_from_dto(result)
+        if isinstance(result, Vehicle):
+            return vehicle_to_audit_map(result)
+        return {}
+
+    @auditable(resource_type="VEHICLE", action_type="CREATE")
     def create_vehicle(self, data: VehicleCreateDTO) -> Vehicle:
         # Validar que el cliente exista
         client = self.client_repository.get_by_id(data.client_id)
@@ -92,6 +109,7 @@ class VehicleService:
             )
         return self.vehicle_repository.get_by_client_id(client_id)
 
+    @auditable(resource_type="VEHICLE", action_type="UPDATE", id_param_name="vehicle_id")
     def update_vehicle(self, vehicle_id: UUID, data: VehicleUpdateDTO) -> Vehicle:
         vehicle = self.get_vehicle_by_id(vehicle_id)
 
@@ -128,6 +146,7 @@ class VehicleService:
 
         return self.vehicle_repository.save(vehicle)
 
+    @auditable(resource_type="VEHICLE", action_type="DELETE", id_param_name="vehicle_id")
     def delete_vehicle(self, vehicle_id: UUID) -> None:
         vehicle = self.get_vehicle_by_id(vehicle_id)
         self.vehicle_repository.delete(vehicle)

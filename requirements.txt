@@ -61,3 +61,4 @@ google-cloud-firestore
 firebase-admin
 google-cloud-aiplatform
 Pillow
+cryptography>=41.0.0
