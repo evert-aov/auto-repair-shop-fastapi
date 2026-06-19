@@ -91,6 +91,15 @@ class OfferService:
                 assigned_tech.is_available = False
                 self.db.commit()
                 logger.info(f"🔒 Técnico {assigned_tech.name} marcado como OCUPADO")
+                # Notificar al técnico asignado
+                try:
+                    await self.notification_service.notify_technician_assigned(
+                        technician_id=technician_id,
+                        incident=incident,
+                        workshop=workshop,
+                    )
+                except Exception as e:
+                    logger.error(f"Error al notificar al técnico: {e}")
         if estimated_arrival_min:
             incident.estimated_arrival_min = estimated_arrival_min
         elif offer.distance_km:

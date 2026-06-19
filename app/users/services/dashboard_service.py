@@ -104,7 +104,7 @@ class DashboardService:
         total_incidents = self.repo.db.query(func.count(Incident.id)).scalar() or 0
         cancelled_count = self.repo.db.query(func.count(Incident.id)).filter(Incident.status == IncidentStatus.CANCELLED).scalar() or 0
         cancelled_pct = round((cancelled_count / total_incidents * 100.0) if total_incidents > 0 else 0.0, 1)
-        on_time_completed_pct = 95.0
+        on_time_completed_pct = self.repo.get_sla_compliance_rate()
 
         return AdminStats(
             total_revenue=total_revenue,
@@ -322,7 +322,7 @@ class DashboardService:
         incident_distribution = {row[0]: row[1] for row in dist_rows}
 
         # 12. workshop_rank
-        workshop_rank = 1  # default or mock ranking
+        workshop_rank = self.repo.get_workshop_rank(wid)
 
         # 13. incidents_by_zone
         zone_rows = self.repo.db.query(
@@ -351,7 +351,22 @@ class DashboardService:
         cancelled_pct = round((cancelled_count / total_workshop_incidents * 100.0) if total_workshop_incidents > 0 else 0.0, 1)
 
         # 16. on_time_completed_pct
-        on_time_completed_pct = 95.0
+        on_time_completed_pct = self.repo.get_sla_compliance_rate(wid)
+
+        # 17. recent_ratings
+        ratings_list = self.repo.get_workshop_recent_ratings(wid)
+        recent_ratings = [
+            {
+                "id": str(r.id),
+                "client_name": self.repo.get_user_name(r.client_id),
+                "score": r.score,
+                "response_time_score": r.response_time_score,
+                "quality_score": r.quality_score,
+                "comment": r.comment,
+                "created_at": r.created_at.isoformat()
+            }
+            for r in ratings_list
+        ]
 
         return WorkshopStats(
             completed_services=completed_services,
@@ -371,6 +386,7 @@ class DashboardService:
             cancelled_count=cancelled_count,
             cancelled_pct=cancelled_pct,
             on_time_completed_pct=on_time_completed_pct,
+            recent_ratings=recent_ratings,
         )
 
     def get_technician_stats(self, user_id: uuid.UUID) -> TechnicianStats:
