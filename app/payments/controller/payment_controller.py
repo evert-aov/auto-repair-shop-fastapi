@@ -68,19 +68,32 @@ async def create_order(
         logger.error(f"[PayPal] Error creando orden: {exc}")
         raise HTTPException(status_code=502, detail=f"Error al conectar con PayPal: {exc}")
 
-    payment = Payment(
-        incident_id=incident.id,
-        client_id=current_user.id,
-        workshop_id=incident.assigned_workshop_id,
-        gross_amount=gross,
-        commission_amount=commission,
-        net_amount=net,
-        currency="USD",
-        payment_method=PaymentMethod.PAYPAL,
-        status=PaymentStatus.PENDING,
-        gateway_transaction_id=paypal_result["order_id"],
-    )
-    payment = PaymentRepository(db).create(payment)
+    if existing:
+        # Reutilizar el registro de pago existente para evitar registros duplicados
+        existing.gross_amount = gross
+        existing.commission_amount = commission
+        existing.net_amount = net
+        existing.gateway_transaction_id = paypal_result["order_id"]
+        existing.status = PaymentStatus.PENDING
+        existing.payout_id = None
+        existing.payout_status = None
+        existing.paid_at = None
+        existing.created_at = datetime.now(timezone.utc)
+        payment = PaymentRepository(db).save(existing)
+    else:
+        payment = Payment(
+            incident_id=incident.id,
+            client_id=current_user.id,
+            workshop_id=incident.assigned_workshop_id,
+            gross_amount=gross,
+            commission_amount=commission,
+            net_amount=net,
+            currency="USD",
+            payment_method=PaymentMethod.PAYPAL,
+            status=PaymentStatus.PENDING,
+            gateway_transaction_id=paypal_result["order_id"],
+        )
+        payment = PaymentRepository(db).create(payment)
 
     logger.info(f"[Pago] Orden PayPal creada para incidente {incident.id}: {paypal_result['order_id']}")
 
