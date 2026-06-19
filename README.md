@@ -7,7 +7,7 @@
 | Recurso | Enlace |
 |---|---|
 | Documento de Reportes e IA (PDF) | [`docs/ai_reports_implementation.md`](docs/ai_reports_implementation.md) |
-| Repositorio público | https://github.com/evert-aov/SI2-ARS-backend |
+| Repositorio público | https://github.com/InformationSystem2/auto-repair-shop-fastapi/tree/main |
 
 ---
 
@@ -192,21 +192,15 @@ Toda consulta ejecutada por el motor analítico dinámico utiliza estrictamente 
 | **Control por Endpoint (`/taller/{id}`)** | No (Retorna todo el objeto o nada) | Baja | Baja |
 | **Control a nivel de Atributo (ARS)** | **Sí** (Oculta precios, calificaciones, ingresos) | **Alta** (Granularidad según permisos) | Media (Constructor SQL dinámico) |
 
----
-
-## Documentación Técnica
-
-- [`docs/ai_reports_implementation.md`](docs/ai_reports_implementation.md) — Análisis arquitectónico del asistente de voz, Speech-to-Text y procesamiento con Gemini 2.5 Flash.
 
 ---
 
 ## Equipo
 
-| Integrante | Rol |
-|---|---|
-| **Evert Rodríguez Araúz** | Backend Developer / Arquitecto de Software |
-| *[Integrante 2]* | *[Rol]* |
-| *[Integrante 3]* | *[Rol]* |
+| Integrante |
+|---|
+| **Evert Rodríguez Araúz** | 
+| **Rojas Rivero Douglas Ismael** |
 
 ---
 

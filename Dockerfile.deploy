@@ -8,7 +8,8 @@ WORKDIR /app
 # Mantenemos las dependencias del sistema (quitamos ffmpeg si no lo necesitas para procesar video/audio)
 RUN apt-get update && apt-get install -y \
     libpq-dev \
-    gcc \ 
+    gcc \
+    ffmpeg \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
