@@ -50,10 +50,12 @@ def _cleanup_old_notifications():
 def start_scheduler():
     scheduler.add_job(
         func=_check_offer_timeouts,
-        trigger=IntervalTrigger(seconds=5),
+        trigger=IntervalTrigger(seconds=10),
         id="check_offer_timeouts",
         name="Detect offer timeouts (YANGO REAL)",
         replace_existing=True,
+        max_instances=3,
+        misfire_grace_time=30,
     )
     scheduler.add_job(
         func=_cleanup_old_notifications,
@@ -65,7 +67,7 @@ def start_scheduler():
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("Scheduler started: check_offer_timeouts every 5s")
+    logger.info("Scheduler started: check_offer_timeouts every 10s")
 
 
 def stop_scheduler():
