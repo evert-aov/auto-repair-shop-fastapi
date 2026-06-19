@@ -29,6 +29,15 @@ def get_all_vehicles(
     return VehicleService(db).get_all_vehicles(current_user)
 
 
+@router.get("/my", response_model=list[VehicleResponseDTO], status_code=status.HTTP_200_OK)
+def get_my_vehicles(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+    _auth=Depends(require_permission("vehicles:read"))
+):
+    return VehicleService(db).get_my_vehicles(current_user)
+
+
 @router.get("/{vehicle_id}", response_model=VehicleResponseDTO, status_code=status.HTTP_200_OK)
 def get_vehicle(
     vehicle_id: UUID,

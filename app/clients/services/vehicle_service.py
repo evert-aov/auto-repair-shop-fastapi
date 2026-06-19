@@ -75,7 +75,7 @@ class VehicleService:
 
     def get_all_vehicles(self, current_user: User) -> list[Vehicle]:
         """
-        Obtiene vehículos según el rol del usuario:
+        Obtiene vehículos según el rol del usuario (para Web):
         - Admin: ve todos los vehículos
         - Client: ve solo sus propios vehículos
         """
@@ -85,6 +85,24 @@ class VehicleService:
             return self.vehicle_repository.get_all()
         elif "client" in user_roles:
             return self.vehicle_repository.get_by_client_id(current_user.id)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para acceder a los vehículos",
+            )
+
+    def get_my_vehicles(self, current_user: User) -> list[Vehicle]:
+        """
+        Obtiene vehículos del usuario autenticado (para Móvil):
+        - Client: ve solo sus propios vehículos (prioritario)
+        - Admin: ve todos los vehículos
+        """
+        user_roles = {r.name for r in current_user.roles}
+
+        if "client" in user_roles:
+            return self.vehicle_repository.get_by_client_id(current_user.id)
+        elif "admin" in user_roles:
+            return self.vehicle_repository.get_all()
         else:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
