@@ -330,8 +330,20 @@ async def complete_offer(
         raise HTTPException(status_code=404, detail="Offer not found")
 
     workshop = WorkshopRepository(db).get_by_id(offer.workshop_id)
-    if not workshop or workshop.owner_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not your workshop")
+    if not workshop:
+        raise HTTPException(status_code=404, detail="Workshop not found")
+
+    is_authorized = False
+    if workshop.owner_user_id == current_user.id:
+        is_authorized = True
+    elif current_user.type == "technician":
+        from app.workshops.models import Technician
+        tech = db.query(Technician).filter(Technician.id == current_user.id).first()
+        if tech and tech.workshop_id == workshop.id:
+            is_authorized = True
+
+    if not is_authorized:
+        raise HTTPException(status_code=403, detail="Not authorized to complete this offer")
         
     incident = IncidentRepository(db).get_by_id(offer.incident_id)
     if incident:
