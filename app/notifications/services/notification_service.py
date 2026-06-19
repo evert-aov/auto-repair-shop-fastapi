@@ -200,16 +200,41 @@ class NotificationService:
 
         title = f"{emoji} Nueva solicitud de auxilio"
 
-        body = (
+        # Obtener el nombre del cliente
+        from app.users.models import User, Role
+        client_user = self.db.query(User).filter(User.id == incident.client_id).first()
+        client_name = f"{client_user.name} {client_user.last_name}" if client_user else "Cliente desconocido"
+
+        # Cuerpo original de la notificación
+        body_content = (
             f"{incident.ai_category or 'Problema mecánico'} - "
             f"Prioridad {incident.ai_priority.value if incident.ai_priority else 'MEDIUM'}"
         )
 
         if incident.ai_summary:
-            body += f"\n{incident.ai_summary[:80]}..."
+            body_content += f"\n{incident.ai_summary[:80]}..."
 
         if offer.distance_km:
-            body += f"\nDistancia: {offer.distance_km:.1f} km"
+            body_content += f"\nDistancia: {offer.distance_km:.1f} km"
+
+        # Anteponemos el taller y cliente al principio del mensaje
+        body = f"Taller: {workshop.name} | Cliente: {client_name}\n\n{body_content}"
+
+        # Enviar copia a todos los administradores
+        try:
+            admins = self.db.query(User).join(User.roles).filter(Role.name == "admin").all()
+            for admin in admins:
+                if admin.id != workshop.owner_user_id:
+                    await self._send_notification(
+                        user_id=admin.id,
+                        notification_type=NotificationType.NEW_REQUEST,
+                        title=f"[Admin Copy] {title}",
+                        body=body,
+                        incident_id=incident.id,
+                        priority="high",
+                    )
+        except Exception as admin_exc:
+            logger.error(f"Error enviando copia de notificación a administradores: {admin_exc}")
 
         return await self._send_notification(
             user_id=workshop.owner_user_id,
@@ -384,6 +409,28 @@ class NotificationService:
         return await self._send_notification(
             user_id=incident.client_id,
             notification_type=NotificationType.STATUS_UPDATE,
+            title=title,
+            body=body,
+            incident_id=incident.id,
+            priority="high"
+        )
+
+    async def notify_technician_assigned(
+            self,
+            technician_id: uuid.UUID,
+            incident: Incident,
+            workshop: Workshop
+    ) -> Notification:
+        title = "🚗 Nuevo servicio asignado"
+        body = (
+            f"Se te ha asignado un nuevo servicio de auxilio mecánico.\n"
+            f"Categoría: {incident.ai_category or 'Problema mecánico'}.\n"
+            f"Taller: {workshop.name}"
+        )
+
+        return await self._send_notification(
+            user_id=technician_id,
+            notification_type=NotificationType.NEW_REQUEST,
             title=title,
             body=body,
             incident_id=incident.id,

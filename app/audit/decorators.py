@@ -121,10 +121,6 @@ def _extract_id(args: tuple, kwargs: dict, id_param_name: str) -> Any:
         candidate = args[1]
         if isinstance(candidate, (str, int, uuid.UUID)):
             return candidate
-        logger.warning(
-            "Could not extract ID from positional args: id_param_name=%s, args[1] type=%s",
-            id_param_name, type(candidate).__name__,
-        )
     return None
 
 
