@@ -245,6 +245,7 @@ class DashboardRepository:
             func.coalesce(func.sum(Payment.gross_amount), 0.0),
         ).join(Payment, Payment.incident_id == Incident.id).filter(
             Payment.client_id == client_id,
+            Payment.status == PaymentStatus.COMPLETED,
             Incident.ai_category.isnot(None),
         ).group_by(Incident.ai_category).all()
         return [(r[0], float(r[1])) for r in rows]
@@ -264,10 +265,54 @@ class DashboardRepository:
     def get_incident_gross_payment(self, incident_id) -> float:
         return float(
             self.db.query(func.coalesce(func.sum(Payment.gross_amount), 0.0))
-            .filter(Payment.incident_id == incident_id).scalar() or 0.0
+            .filter(
+                Payment.incident_id == incident_id,
+                Payment.status == PaymentStatus.COMPLETED,
+            ).scalar() or 0.0
         )
 
     def get_incident_rating(self, incident_id, client_id) -> Rating | None:
         return self.db.query(Rating).filter(
             Rating.incident_id == incident_id, Rating.client_id == client_id
         ).first()
+
+    def get_sla_compliance_rate(self, workshop_id: uuid.UUID = None) -> float:
+        from sqlalchemy import and_
+        h_assigned = aliased(IncidentStatusHistory, name="h_assigned")
+        h_in_progress = aliased(IncidentStatusHistory, name="h_in_progress")
+        
+        query = self.db.query(
+            Incident.id,
+            Incident.estimated_arrival_min,
+            h_assigned.created_at.label("assigned_at"),
+            h_in_progress.created_at.label("arrived_at")
+        ).join(h_assigned, and_(h_assigned.incident_id == Incident.id, h_assigned.new_status == 'assigned'))\
+         .join(h_in_progress, and_(h_in_progress.incident_id == Incident.id, h_in_progress.new_status == 'in_progress'))\
+         .filter(Incident.status == IncidentStatus.COMPLETED)
+         
+        if workshop_id:
+            query = query.filter(Incident.assigned_workshop_id == workshop_id)
+            
+        rows = query.all()
+        if not rows:
+            return 100.0
+            
+        on_time_count = 0
+        for r in rows:
+            est = r.estimated_arrival_min or 15
+            actual = (r.arrived_at - r.assigned_at).total_seconds() / 60.0
+            if actual <= est:
+                on_time_count += 1
+                
+        return round((on_time_count / len(rows)) * 100.0, 1)
+
+    def get_workshop_rank(self, workshop_id: uuid.UUID) -> int:
+        all_workshops = self.db.query(Workshop.id, Workshop.rating_avg, Workshop.total_services)\
+            .filter(Workshop.is_verified.is_(True))\
+            .order_by(Workshop.rating_avg.desc(), Workshop.total_services.desc())\
+            .all()
+            
+        for index, w in enumerate(all_workshops):
+            if w.id == workshop_id:
+                return index + 1
+        return 1

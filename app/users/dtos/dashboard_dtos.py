@@ -44,6 +44,7 @@ class WorkshopStats(BaseModel):
     cancelled_count: int
     cancelled_pct: float
     on_time_completed_pct: float
+    recent_ratings: list[dict[str, Any]]
 
 
 class ClientStats(BaseModel):
