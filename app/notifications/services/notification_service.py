@@ -434,5 +434,39 @@ class NotificationService:
             title=title,
             body=body,
             incident_id=incident.id,
-            priority="high"
+            priority="high",
+        )
+
+    async def notify_workshop_incident_cancelled(
+            self,
+            workshop_owner_id: uuid.UUID,
+            incident: Incident
+    ) -> Notification:
+        title = "❌ Solicitud cancelada por el cliente"
+        body = f"La solicitud de auxilio #{str(incident.id)[:8]} ha sido cancelada por el cliente."
+
+        return await self._send_notification(
+            user_id=workshop_owner_id,
+            notification_type=NotificationType.STATUS_UPDATE,
+            title=title,
+            body=body,
+            incident_id=incident.id,
+            priority="high",
+        )
+
+    async def notify_technician_incident_cancelled(
+            self,
+            technician_id: uuid.UUID,
+            incident: Incident
+    ) -> Notification:
+        title = "❌ Servicio cancelado por el cliente"
+        body = f"El servicio asignado #{str(incident.id)[:8]} ha sido cancelada por el cliente."
+
+        return await self._send_notification(
+            user_id=technician_id,
+            notification_type=NotificationType.STATUS_UPDATE,
+            title=title,
+            body=body,
+            incident_id=incident.id,
+            priority="high",
         )

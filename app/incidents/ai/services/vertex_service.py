@@ -127,7 +127,7 @@ def _build_triage_prompt(description: str | None, audio_transcript: str | None, 
         "Responde en JSON con esta estructura:\n"
         "{\n"
         "  \"sistema\": {\n"
-        "    \"categoria\": \"categoria_elegida\",\n"
+        "    \"categoria\": \"categoria_elegida (puedes listar varias separadas por comas si hay múltiples problemas, por ejemplo: 'engine,tire')\",\n"
         "    \"prioridad\": \"PRIORIDAD_ELEGIDA\",\n"
         "    \"requiere_grua\": false,\n"
         "    \"especialidad_requerida\": \"especialidad\",\n"
@@ -146,7 +146,7 @@ def _build_triage_prompt(description: str | None, audio_transcript: str | None, 
         "}\n"
         "Reglas:\n"
         "- Sé extremadamente específico en el diagnóstico técnico.\n"
-        "- Categorías: [battery, tire, collision, engine, ac, transmission, towing, locksmith, general, uncertain].\n"
+        "- Categorías permitidas: [battery, tire, collision, engine, ac, transmission, towing, locksmith, general, uncertain]. Si el incidente presenta múltiples problemas, puedes listar varias categorías separadas por coma (ej. 'engine,tire').\n"
         f"Vehículo: {vehicle_info or 'No especificado'}\n"
         f"Contexto del usuario: {description or 'No proporcionado'}\n"
         f"Transcripción de audio: {transcript or 'N/A'}"
@@ -213,10 +213,32 @@ def _normalize_triage_result(payload: dict) -> dict:
         "freno": "general",
         "incierto": "uncertain"
     }
-    category = es_to_en.get(category_raw, category_raw)
 
-    if category not in _ALLOWED_CATEGORIES and category != "uncertain":
+    # Split by separators to support multiple categories
+    normalized_raw = category_raw.replace(" y ", ",").replace(" and ", ",").replace(";", ",")
+    raw_parts = [p.strip() for p in normalized_raw.split(",") if p.strip()]
+
+    resolved_categories = []
+    for part in raw_parts:
+        resolved = es_to_en.get(part, part)
+        if resolved in _ALLOWED_CATEGORIES:
+            resolved_categories.append(resolved)
+        else:
+            # Check if any allowed category is a substring of the part
+            for allowed in _ALLOWED_CATEGORIES:
+                if allowed in resolved:
+                    resolved_categories.append(allowed)
+                    break
+
+    if not resolved_categories:
         category = "uncertain"
+    else:
+        # Keep unique resolved categories to avoid duplicates
+        unique_resolved = []
+        for c in resolved_categories:
+            if c not in unique_resolved:
+                unique_resolved.append(c)
+        category = ",".join(unique_resolved)
 
     priority = str(sistema.get("prioridad", payload.get("priority", "MEDIUM"))).upper().strip()
     if priority not in _ALLOWED_PRIORITIES:
@@ -361,18 +383,27 @@ def classify_text_only(
     """Keyword based fallback classification (previously classification_service)"""
     combined = " ".join(filter(None, [description, audio_transcript])).lower()
 
-    category = "general"
-    priority = "MEDIUM"
-    confidence = 0.60
-    summary = description[:200]
+    categories = []
+    priorities = []
 
     for keyword, (cat, prio) in _KEYWORD_MAP.items():
         if keyword in combined:
-            category = cat
-            priority = prio
-            confidence = 0.85
-            summary = f"Detected {cat} issue — {description[:150]}"
-            break
+            if cat not in categories:
+                categories.append(cat)
+            priorities.append(prio)
+
+    if not categories:
+        category = "general"
+        priority = "MEDIUM"
+        confidence = 0.60
+        summary = description[:200]
+    else:
+        category = ",".join(categories)
+        priority_order = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+        highest_prio = max(priorities, key=lambda p: priority_order.get(p, 0))
+        priority = highest_prio
+        confidence = 0.85
+        summary = f"Detected {category} issues — {description[:150]}"
 
     logger.info("Text-only classification: category=%s, priority=%s, confidence=%.2f", category, priority, confidence)
     return ClassificationResult(

@@ -128,54 +128,111 @@ class AssignmentService:
         """
         from app.notifications.services.notification_service import NotificationService
 
-        specialty_name = _CATEGORY_TO_SPECIALTY.get(incident.ai_category or "")
-        if not specialty_name:
-            logger.warning(f"No specialty mapping for ai_category={incident.ai_category!r}")
+        # Support multiple categories separated by comma
+        categories = [c.strip() for c in (incident.ai_category or "").split(",") if c.strip()]
+        if not categories:
+            logger.warning(f"No categories found for incident {incident.id}")
             await self._mark_no_offers(incident)
             return None
 
-        specialty = self.workshop_repository.get_specialty_by_name(specialty_name)
-        if not specialty:
-            logger.warning(f"Specialty '{specialty_name}' not in database")
+        specialties = []
+        specialty_names = []
+        for cat in categories:
+            s_name = _CATEGORY_TO_SPECIALTY.get(cat)
+            if not s_name:
+                logger.warning(f"No specialty mapping for ai_category={cat!r}")
+                continue
+            spec = self.workshop_repository.get_specialty_by_name(s_name)
+            if not spec:
+                logger.warning(f"Specialty '{s_name}' not in database")
+                continue
+            specialties.append(spec)
+            specialty_names.append(s_name)
+
+        if not specialties:
+            logger.warning(f"No valid specialties found in database for categories {categories}")
             await self._mark_no_offers(incident)
             return None
 
-        workshops = self.workshop_repository.find_nearby_workshops(
-            latitude=incident.incident_lat,
-            longitude=incident.incident_lng,
-            specialty_id=specialty.id,
-            radius_km=50.0,
-            min_rating=1.0,
+        specialty_names_str = ", ".join(specialty_names)
+
+        from sqlalchemy.orm import selectinload
+        from app.workshops.models import Workshop
+
+        all_workshops = (
+            self.db.query(Workshop)
+            .options(selectinload(Workshop.workshop_specialties))
+            .all()
         )
 
-        logger.warning(f"🔎 Talleres cercanos encontrados con especialidad '{specialty_name}': {len(workshops)}")
+        logger.warning(f"🔎 Iniciando evaluación de talleres para el incidente {incident.id} (Especialidades requeridas: '{specialty_names_str}'). Total registrados: {len(all_workshops)}")
 
         scored: list[tuple] = []
-        for workshop in workshops:
-            pts = workshop.activity_points if workshop.activity_points is not None else 50
-            if pts <= 0:
-                logger.warning(f"❌ Taller {workshop.name} descartado: 0 puntos de actividad")
+        for workshop in all_workshops:
+            # 1. Filtro de Especialidad (El taller debe cubrir al menos una de las especialidades requeridas)
+            workshop_specialty_ids = {ws.specialty_id for ws in workshop.workshop_specialties}
+            required_specialty_ids = {sp.id for sp in specialties}
+            has_specialty = bool(workshop_specialty_ids & required_specialty_ids)
+            if not has_specialty:
+                logger.warning(f"❌ Taller {workshop.name} descartado: No cubre ninguna de las especialidades requeridas '{specialty_names_str}'")
                 continue
 
-            if self._is_in_cooldown(workshop.id):
-                logger.warning(f"❌ Taller {workshop.name} descartado: Está en Cooldown")
+            # 2. Filtro de Activo
+            if not workshop.is_active:
+                logger.warning(f"❌ Taller {workshop.name} descartado: No está activo")
                 continue
 
-            technician = self.technician_repository.get_available_technician(workshop.id)
-            if not technician:
-                logger.warning(f"❌ Taller {workshop.name} descartado: No tiene técnicos disponibles")
+            # 3. Filtro de Verificado
+            if not workshop.is_verified:
+                logger.warning(f"❌ Taller {workshop.name} descartado: No está verificado")
                 continue
 
+            # 4. Filtro de Calificación Mínima
+            rating_val = float(workshop.rating_avg)
+            if rating_val < 1.0 and rating_val != 0.0:
+                logger.warning(f"❌ Taller {workshop.name} descartado: Calificación promedio {rating_val} menor al mínimo de 1.0")
+                continue
+
+            # 5. Filtro de Rango Geográfico (Distancia <= 50.0 km)
             distance_km = self._haversine(
                 incident.incident_lat,
                 incident.incident_lng,
                 float(workshop.latitude or 0),
                 float(workshop.longitude or 0),
             )
-            logger.warning(f"✅ Taller {workshop.name} APTO. Distancia: {distance_km:.2f}km")
+            if distance_km > 50.0:
+                logger.warning(f"❌ Taller {workshop.name} descartado: Distancia de {distance_km:.2f}km supera el límite de 50.0km")
+                continue
+
+            # 6. Filtro de Puntos de Actividad
+            pts = workshop.activity_points if workshop.activity_points is not None else 50
+            if pts <= 0:
+                logger.warning(f"❌ Taller {workshop.name} descartado: Puntos de actividad insuficientes ({pts})")
+                continue
+
+            # 7. Filtro de Cooldown
+            if self._is_in_cooldown(workshop.id):
+                logger.warning(f"❌ Taller {workshop.name} descartado: Está en período de enfriamiento (cooldown)")
+                continue
+
+            # 8. Filtro de Técnicos Disponibles
+            technician = self.technician_repository.get_available_technician(workshop.id)
+            if not technician:
+                logger.warning(f"❌ Taller {workshop.name} descartado: No tiene técnicos disponibles")
+                continue
+
+            # Si pasa todos los filtros, es APTO
+            logger.warning(
+                f"✅ Taller {workshop.name} APTO. "
+                f"Especialidades: '{specialty_names_str}' | "
+                f"Distancia: {distance_km:.2f}km | "
+                f"Calificación: {rating_val:.2f} | "
+                f"Puntos de actividad: {pts} | "
+                f"Técnico disponible: {technician.name}"
+            )
 
             priority_value = incident.ai_priority.value if incident.ai_priority else "MEDIUM"
-            base_score = self._calculate_ai_score(distance_km, float(workshop.rating_avg), priority_value)
+            base_score = self._calculate_ai_score(distance_km, rating_val, priority_value)
             penalty = self._calculate_activity_penalty(pts)
             final_score = round(base_score * (1.0 - penalty), 3)
             scored.append((workshop, distance_km, final_score))

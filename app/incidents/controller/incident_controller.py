@@ -758,11 +758,31 @@ def get_transcription_job_status(job_id: str):
 )
 def cancel_incident(
     incident_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     service = IncidentService(db)
+    
+    # Capture assignment info before cancellation
+    incident = service.get_entity(incident_id)
+    assigned_workshop_id = incident.assigned_workshop_id if incident else None
+    assigned_technician_id = incident.assigned_technician_id if incident else None
+
     updated_incident = service.cancel_incident(incident_id, current_user)
+
+    if assigned_workshop_id:
+        from app.notifications.services.notification_service import NotificationService
+        from app.workshops.models import Workshop
+        ws = db.query(Workshop).filter(Workshop.id == assigned_workshop_id).first()
+        if ws:
+            notifier = NotificationService(db)
+            # Notify workshop owner
+            background_tasks.add_task(notifier.notify_workshop_incident_cancelled, ws.owner_user_id, updated_incident)
+            # Notify technician if assigned
+            if assigned_technician_id:
+                background_tasks.add_task(notifier.notify_technician_incident_cancelled, assigned_technician_id, updated_incident)
+
     return {
         "id": str(updated_incident.id),
         "status": updated_incident.status.value,
